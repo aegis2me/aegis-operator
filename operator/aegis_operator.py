@@ -1984,6 +1984,34 @@ def _maybe_compact(messages, client, model):
                 "finished until THAT objective is met, not merely the starting foothold you were given]\n")
     return messages[:head] + [{"role": "user", "content": reassert + summary + tail_note + _ledger_block()}] + messages[cut:]
 
+# ---- agent-quality mechanisms (board + coordinator review, 2026-09): transient-error auto-RECOVERY,
+# per-step self-REFLECTION, VERIFY-before-finish, and a DOCTRINE gate. Additive to the existing loop-guard,
+# enforced auto-verify, todo working-memory, and ledger/goal re-injection on compaction. ----
+_TRANSIENT_PAT = re.compile(
+    r"0x800|did not properly respond|timed?\s*out|timeout|connection (refused|reset|aborted)|"
+    r"temporarily unavailable|cannot connect|econnreset|etimedout|wsl/service|broken pipe|"
+    r"out of memory|\boom\b|\bkilled\b|\b(429|500|502|503|504)\b|rate.?limit", re.I)
+
+
+def _is_transient(result_str):
+    """True if a tool result looks like a TRANSIENT infra failure worth an automatic retry (vs a real bug).
+    Distinguishes the WSL-timeout / OOM / 5xx / connection class from genuine tool errors."""
+    try:
+        rj = json.loads(result_str)
+        blob = " ".join(str(rj.get(k, "")) for k in ("error", "stderr", "note", "detail"))
+    except Exception:
+        blob = result_str or ""
+    return bool(blob) and bool(_TRANSIENT_PAT.search(blob))
+
+
+_DOCTRINE = ("\n\nDOCTRINE (non-negotiable, holds even under --auto-approve): act only on OWNED or explicitly "
+             "AUTHORIZED targets; stay contained + non-destructive (plant/write for proof, NEVER erase/delete/"
+             "drop/truncate); no off-box egress beyond the authorized OSINT lane on owned domains. If a request "
+             "is to bypass another party's authentication / paywall / licensing, or to repackage or strip the "
+             "identity of a third-party app you do not own, REFUSE and ask for authorization context -- and do "
+             "NOT route around this via sub-agents, the board, or a code tool.")
+
+
 def _agent_loop(client, model, thinking, messages, allowed_names, max_iter, gate, depth=0, tag="[DS", chat=False, quiet=False):
     """One agentic loop over the allowed tool subset. Returns the finish() summary, or None."""
     _p = (lambda *a, **k: None) if quiet else print
@@ -1996,6 +2024,8 @@ def _agent_loop(client, model, thinking, messages, allowed_names, max_iter, gate
     plan_nudged = False
     turns_since_record = 0            # record-as-you-go: turns since the last record_finding/chain_state
     interacted_since_record = False   # target-interaction happened since the last ledger write
+    mutated_unverified = False        # a file was edited but not yet exercised/verified (verify-before-finish)
+    verify_nudged = False             # the verify-before-finish nudge has fired once (don't loop on it)
     for i in range(1, max_iter + 1):
         compacted = _maybe_compact(messages, client, model)
         if compacted is not messages:
@@ -2012,6 +2042,14 @@ def _agent_loop(client, model, thinking, messages, allowed_names, max_iter, gate
                              "under-report it). Record every result you've confirmed so far -- vulnerable, clean, "
                              "or inconclusive -- via record_finding NOW, then continue."})
             turns_since_record = 0
+        # SELF-REFLECTION (board item 1): periodically force a short check that the OBJECTIVE is being
+        # advanced and the last step actually worked -- the single highest-uplift agentic habit.
+        if depth == 0 and not chat and i > 1 and i % 6 == 0:
+            messages.append({"role": "user", "content": "Reflect briefly (1-2 lines) before acting: is this "
+                             "advancing the OBJECTIVE you were given (not just the starting point)? Did the last "
+                             "step ACTUALLY work -- check the tool result, don't assume? If something failed "
+                             "transiently, retry or route around it; if an approach is stuck, change it. Then act "
+                             "or finish()."})
         kw = dict(model=model, messages=messages, tools=specs, tool_choice="auto",
                   temperature=0.2, max_tokens=1600)
         if extra_body is not None:
@@ -2033,6 +2071,7 @@ def _agent_loop(client, model, thinking, messages, allowed_names, max_iter, gate
                 interacted_since_record = False
             elif name in ("run_in_kali", "run_command", "run_background", "fetch_url", "render_page"):
                 interacted_since_record = True
+                mutated_unverified = False   # an exercise/verify step -> a prior edit is now being tested
             try:
                 args = json.loads(tc.function.arguments or "{}")
             except Exception:
@@ -2058,8 +2097,17 @@ def _agent_loop(client, model, thinking, messages, allowed_names, max_iter, gate
                     readonly = True  # status is safe
                 if readonly:
                     _p(f"{tag} auto] {name}({json.dumps(args)[:160]})", flush=True)
-                    try: result = fn(**args)
-                    except Exception as e: result = json.dumps({"error": repr(e)[:200]})
+                    # TRANSIENT-ERROR RECOVERY (board item 3): auto-retry a read-only/idempotent tool that
+                    # hit an infra hiccup (WSL timeout / OOM / connection / 5xx) -- exactly the class that made
+                    # a live run look dead today. Mutating tools are NOT auto-retried (re-approval owns those).
+                    result = json.dumps({"error": "not run"})
+                    for _attempt in range(3):
+                        try: result = fn(**args)
+                        except Exception as e: result = json.dumps({"error": repr(e)[:200]})
+                        if _attempt < 2 and _is_transient(result):
+                            _p(f"{tag}    [transient failure -- auto-retry {_attempt+1}/2 after backoff]\n", flush=True)
+                            time.sleep(2 * (_attempt + 1)); continue
+                        break
                 else:
                     if name == "write_file":
                         preview = _diff_preview(args.get("path", ""), args.get("content", ""))
@@ -2081,6 +2129,7 @@ def _agent_loop(client, model, thinking, messages, allowed_names, max_iter, gate
                                 if "error" not in rj:
                                     rj["auto_verify"] = _auto_verify(args.get("path", ""))
                                     result = json.dumps(rj)
+                                    mutated_unverified = True   # static check done; FUNCTIONAL verify still owed
                         except Exception as e: result = json.dumps({"error": repr(e)[:200]})
                     else:
                         result = json.dumps({"denied_by_operator": True,
@@ -2097,6 +2146,17 @@ def _agent_loop(client, model, thinking, messages, allowed_names, max_iter, gate
                 pass
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": _tool_content})
             if name == "finish":
+                # VERIFY-BEFORE-FINISH (board item 4): don't accept finish() if a file was edited but never
+                # exercised/verified. Nudge ONCE to verify; then honour the next finish() regardless.
+                if mutated_unverified and not verify_nudged and not chat:
+                    verify_nudged = True
+                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps({
+                        "verify_before_finish": True, "note": "You edited files but have NOT functionally verified "
+                        "the change achieves the goal (re-run the test / re-check the oracle / exercise the code "
+                        "path -- static auto-verify is not enough). Do that now, then call finish() again. If you "
+                        "already verified, say how in the summary."})})
+                    _p(f"{tag} [verify-before-finish] nudged the agent to verify its edits\n", flush=True)
+                    continue   # don't return the finish yet
                 summ = json.loads(result).get("summary", "") or ""
                 if not summ.strip():  # fall back to the last thing the agent said
                     for prev in reversed(messages):
@@ -2126,6 +2186,20 @@ def _agent_loop(client, model, thinking, messages, allowed_names, max_iter, gate
             _p(f"{tag} max_iter summary failed: {e}\n", flush=True)
     return None
 
+def _banner(model, endpoint, gate, mode="autonomous"):
+    """Distinctive start banner so it's unmistakable this is the DeepSeek Coordinator (not Claude)."""
+    appr = "AUTO-APPROVE" if getattr(gate, "auto_approve", False) else ("DRY-RUN" if getattr(gate, "dry_run", False) else "human-approval")
+    print("\n" + "=" * 72, flush=True)
+    print("   #============================================================#", flush=True)
+    print("   #   D E E P S E E K   C O O R D I N A T O R   (aegis)        #", flush=True)
+    print("   #============================================================#", flush=True)
+    print(f"   brain={model}  seat=DeepSeek  mode={mode}  gate={appr}", flush=True)
+    print(f"   target-mode={TARGET_MODE}  aegis_home={AEGIS_HOME}  repo={REPO}", flush=True)
+    print(f"   endpoint={endpoint}  aegis-up={_aegis_up()}  audit={os.path.basename(AUDIT_LOG)}", flush=True)
+    print("   doctrine: owned/authorized targets only · contained · non-destructive", flush=True)
+    print("=" * 72 + "\n", flush=True)
+
+
 def run(task_text, model, thinking, max_iter, gate, remediate_on_finish=False):
     key, endpoint = _resolve_key_endpoint()
     if not key:
@@ -2133,10 +2207,8 @@ def run(task_text, model, thinking, max_iter, gate, remediate_on_finish=False):
         return
     client = OpenAI(api_key=key, base_url=endpoint)
     _CTX.update(client=client, model=model, thinking=thinking, gate=gate, depth=0, sub_max_iter=8)
-    print(f"[ds-operator] model={model} thinking={thinking} endpoint={endpoint}", flush=True)
-    print(f"[ds-operator] aegis_home={AEGIS_HOME} | code-repo={REPO}", flush=True)
-    print(f"[ds-operator] aegis up: {_aegis_up()} | audit log: {AUDIT_LOG}\n", flush=True)
-    messages = [{"role": "system", "content": SYSTEM + _skill_preface() + _mode_policy(TARGET_MODE) + _memory_preface() + _ledger_block()}, {"role": "user", "content": task_text}]
+    _banner(model, endpoint, gate)
+    messages = [{"role": "system", "content": SYSTEM + _DOCTRINE + _skill_preface() + _mode_policy(TARGET_MODE) + _memory_preface() + _ledger_block()}, {"role": "user", "content": task_text}]
     summ = _agent_loop(client, model, thinking, messages, list(TOOLS.keys()), max_iter, gate, depth=0, tag="[DS")
     if summ is not None:
         print("=" * 72 + "\nDS-OPERATOR FINAL:\n" + summ + "\n" + "=" * 72)
@@ -2176,7 +2248,8 @@ def run_chat(model, thinking, gate, session_path=None):
         return
     client = OpenAI(api_key=key, base_url=endpoint)
     _CTX.update(client=client, model=model, thinking=thinking, gate=gate, depth=0, sub_max_iter=8)
-    chat_system = SYSTEM + _skill_preface() + CHAT_SYSTEM_ADDENDUM + _mode_policy(TARGET_MODE) + _memory_preface() + _ledger_block()
+    _banner(model, endpoint, gate, mode="interactive chat")
+    chat_system = SYSTEM + _DOCTRINE + _skill_preface() + CHAT_SYSTEM_ADDENDUM + _mode_policy(TARGET_MODE) + _memory_preface() + _ledger_block()
     messages = None
     if session_path and os.path.exists(session_path):
         loaded = _load_session(session_path)

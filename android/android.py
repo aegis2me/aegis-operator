@@ -78,18 +78,25 @@ def _read_kali_file(path, max_bytes=200000):
 
 
 # ---------------- 1. decompile ----------------
-def decompile(apk_path, name=None):
+def decompile(apk_path, name=None, jadx=True):
+    """apktool (smali/res, recompilable -- always) + jadx (readable Java, OPTIONAL). jadx is memory-hungry
+    on large apps; pass jadx=False (--no-jadx) on a constrained host -- the coordinator only needs smali."""
     name = name or re.sub(r"\.apk$", "", os.path.basename(apk_path), flags=re.I)
     kapk = _win_to_kali_path(apk_path)
     wd = f"{WORK}/{name}"
+    # if the apk is already at wd/orig.apk (pre-copied), don't re-copy from a (possibly mangled) path.
+    cp = (f"cp '{kapk}' {wd}/orig.apk; " if kapk not in (f"{wd}/orig.apk",) else "")
+    jadx_step = (
+        f"echo '[jadx] decompiling Java (readable)...'; "
+        f"rm -rf {wd}/jadx; timeout 900 jadx -j 1 -d {wd}/jadx {wd}/orig.apk >/dev/null 2>{wd}/jadx.log || "
+        f"  (echo JADX_PARTIAL; tail -3 {wd}/jadx.log); "
+    ) if jadx else "echo '[jadx] SKIPPED (--no-jadx: apktool smali is the recompilable surface)'; "
     script = (
-        f"set -e; mkdir -p {wd}; cp '{kapk}' {wd}/orig.apk; "
+        f"set -e; mkdir -p {wd}; {cp}"
         f"echo '[apktool] decompiling smali+resources (recompilable)...'; "
         f"rm -rf {wd}/apktool; apktool d -f -o {wd}/apktool {wd}/orig.apk >/dev/null 2>{wd}/apktool.log || "
         f"  (echo APKTOOL_FAIL; tail -5 {wd}/apktool.log); "
-        f"echo '[jadx] decompiling Java (readable)...'; "
-        f"rm -rf {wd}/jadx; jadx -d {wd}/jadx {wd}/orig.apk >/dev/null 2>{wd}/jadx.log || "
-        f"  (echo JADX_PARTIAL; tail -3 {wd}/jadx.log); "
+        f"{jadx_step}"
         f"echo '--- layout ---'; "
         f"echo manifest: $(test -f {wd}/apktool/AndroidManifest.xml && echo yes || echo NO); "
         f"echo smali_files: $(find {wd}/apktool -name '*.smali' 2>/dev/null | wc -l); "
@@ -303,7 +310,7 @@ def main():
     import argparse
     ap = argparse.ArgumentParser(description="ANDROID de/compiler -- decompile, board-assisted modify, recompile")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("decompile"); p.add_argument("apk"); p.add_argument("--name")
+    p = sub.add_parser("decompile"); p.add_argument("apk"); p.add_argument("--name"); p.add_argument("--no-jadx", action="store_true")
     p = sub.add_parser("explore"); p.add_argument("--name", required=True)
     p = sub.add_parser("plan"); p.add_argument("--name", required=True); p.add_argument("--request", required=True)
     p = sub.add_parser("rewrite"); p.add_argument("--name", required=True); p.add_argument("--request", required=True)
@@ -315,7 +322,7 @@ def main():
     p.add_argument("--no-rebuild", action="store_true")
     a = ap.parse_args()
     if a.cmd == "decompile":
-        print(json.dumps(decompile(a.apk, a.name), indent=2))
+        print(json.dumps(decompile(a.apk, a.name, jadx=not a.no_jadx), indent=2))
     elif a.cmd == "explore":
         explore(a.name)
     elif a.cmd == "plan":
