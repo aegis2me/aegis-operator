@@ -18,7 +18,15 @@ Board-converged decisions (ds/qwq/qwen):
   (f) DOCTRINE  = contained; egress only to install tooling; non-destructive; teardown; audited.
 """
 from __future__ import annotations
-import os, sys, json, subprocess, platform, time
+import os, sys, json, subprocess, platform, time, re
+
+# SECURITY (board review): tool names are interpolated into `bash -lc` commands, so a name with shell
+# metacharacters would be command injection. Every tool name MUST pass this strict allowlist before use.
+_SAFE_TOOL = re.compile(r"^[A-Za-z0-9._+-]{1,64}$")
+
+
+def _safe_tool(name):
+    return bool(isinstance(name, str) and _SAFE_TOOL.match(name))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KALI = os.environ.get("AEGIS_KALI_DISTRO", "kali-linux")
@@ -62,6 +70,8 @@ def _audit(entry):
 
 # ---------------- Kali backend ----------------
 def have_kali(tool):
+    if not _safe_tool(tool):
+        return False
     # check the PRINTED PATH (non-empty), not $? -- exit-code capture is unreliable through host->wsl->bash.
     rc, out, _ = _kali(f"command -v {tool} 2>/dev/null; ls ~/.local/bin/{tool} 2>/dev/null", 60)
     return bool(out.strip())
@@ -125,13 +135,18 @@ def run_in_blackarch(cmd, ensure_tools=None, keep_up=False, timeout=1800):
     _start()
     pre = ""
     if ensure_tools:
-        tools = " ".join(ensure_tools) if isinstance(ensure_tools, (list, set, tuple)) else str(ensure_tools)
-        pre = f"pacman -Sy --noconfirm --needed {tools} >/dev/null 2>&1; "
+        _et = [t for t in (ensure_tools if isinstance(ensure_tools, (list, set, tuple)) else [ensure_tools])
+               if _safe_tool(t)]                       # only install validated names (no shell metachars)
+        if _et:
+            pre = f"pacman -Sy --noconfirm --needed {' '.join(_et)} >/dev/null 2>&1; "
     rc, out, err = _kali(f"docker exec {BLACKARCH_CTR} bash -lc {json.dumps(pre + cmd)}", timeout)
     _audit({"backend": "blackarch", "action": "run", "cmd": cmd[:200], "ensure": list(ensure_tools or []),
             "rc": rc})
     if not keep_up:
-        _stop()
+        try:
+            _stop()                                    # cleanup must never mask the tool's actual result
+        except Exception:
+            pass
     return rc, out, err
 
 
@@ -176,7 +191,7 @@ def route(tool):
 
 def pacman_has(tool):
     """Is the tool an installable BlackArch/Arch package? (queried in the container; container left stopped)."""
-    if not _ensure_container():
+    if not _safe_tool(tool) or not _ensure_container():
         return False
     _start()
     rc, out, _ = _kali(f"docker exec {BLACKARCH_CTR} bash -lc 'pacman -Ssq ^{tool}$ 2>/dev/null | head -1'", 300)
@@ -188,6 +203,9 @@ def run_tool(tool, argv, timeout=1800):
     """Run `tool argv...` in the right backend (distro-agnostic API), per the 3-way switch:
     present->Kali; portable-missing->install in Kali then run; non-portable->BlackArch. Each step falls
     back to BlackArch if Kali can't actually provide it (the ultimate 'it only exists in BlackArch' safety)."""
+    if not _safe_tool(tool):
+        return {"tool": tool, "backend": "rejected", "rc": 126,
+                "stdout": "", "stderr": "unsafe tool name (allowed: letters/digits/._+-)"}
     backend = route(tool)
     line = f"{tool} {argv}" if isinstance(argv, str) else " ".join([tool] + list(argv))
     if backend == "kali":

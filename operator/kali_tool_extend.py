@@ -91,7 +91,17 @@ def _load_catalog():
     return cat
 
 
+# SECURITY (board review): names are interpolated into `bash -lc`; reject shell metachars before use.
+_SAFE_TOOL = re.compile(r"^[A-Za-z0-9._+-]{1,64}$")
+
+
+def _safe_tool(name):
+    return bool(isinstance(name, str) and _SAFE_TOOL.match(name))
+
+
 def have(binname):
+    if not _safe_tool(binname):
+        return False
     rc, out, _ = _kali(f"command -v {binname} >/dev/null 2>&1 && echo YES || echo NO", timeout=60)
     return "YES" in out
 
@@ -159,6 +169,9 @@ def install(name, methods=None, approve_gated=None):
     cat = _load_catalog()
     spec = cat.get(name, {})
     binname = spec.get("bin", name)
+    # reject unsafe names for BOTH the tool and its resolved binary (a poisoned catalog bin must not inject)
+    if not _safe_tool(name) or not _safe_tool(binname):
+        print(f"[install] {name}: REJECTED unsafe name"); return {"name": name, "status": "rejected-unsafe-name"}
     if have(binname):
         print(f"[install] {name}: already present ({binname})"); return {"name": name, "status": "present"}
     if approve_gated is None:
