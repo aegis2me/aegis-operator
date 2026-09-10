@@ -643,8 +643,17 @@ def main():
     ap.add_argument("--objective", required=True)
     ap.add_argument("--role", default="owner")
     ap.add_argument("--budget", type=int, default=40)
+    ap.add_argument("--campaign", default=os.environ.get("AEGIS_CAMPAIGN"),
+                    help="campaign id -> join the CROSS-MODE RELAY (resume prior legs' confirmed footholds "
+                         "+ write this leg's). Default: $AEGIS_CAMPAIGN. Omit for a standalone (no-relay) run.")
+    ap.add_argument("--level", default="operator", choices=["operator", "exploitgym", "redteam"],
+                    help="relay LEVEL/tier of this leg (operator=1, exploitgym=2, redteam=3).")
+    ap.add_argument("--max-tier", type=int, default=None,
+                    help="permission-tier ceiling for the relay resume (default: this level's tier).")
+    ap.add_argument("--store", default=None, help="findings ledger path (default operator/hunt_findings.jsonl).")
     a = ap.parse_args()
-    print(json.dumps(run_hunt(a.objective, a.role, a.budget), indent=2, default=str))
+    print(json.dumps(run_hunt(a.objective, a.role, a.budget, store_path=a.store,
+                              campaign=a.campaign, level=a.level, max_tier=a.max_tier), indent=2, default=str))
 
 
 if __name__ == "__main__":
