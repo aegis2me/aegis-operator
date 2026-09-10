@@ -1,0 +1,17 @@
+{
+ "run_id": "https://localhost:8443",
+ "pid": 25284,
+ "state": "done",
+ "stage": "operator",
+ "attempt": 50,
+ "attempts_hung": 0,
+ "current_leg": "differential",
+ "last_event": "run_complete",
+ "last_error": null,
+ "last_event_at": "2026-09-10T13:03:36Z",
+ "wall_clock_elapsed_s": 562.1,
+ "wall_clock_budget_s": 3600.0,
+ "current_surface": "/assets/",
+ "coverage": "16/16",
+ "confirmed": 2
+}

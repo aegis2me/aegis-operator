@@ -1,0 +1,9 @@
+[Unit]
+Description=Run aegis-rag integrity + backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=yes
+
+[Install]
+WantedBy=timers.target

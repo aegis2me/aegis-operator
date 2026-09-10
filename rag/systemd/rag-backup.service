@@ -1,0 +1,10 @@
+[Unit]
+Description=aegis-rag daily integrity check + online backup snapshot
+After=rag-db.service
+Wants=rag-db.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/aegis-rag
+# integrity first; only snapshot if it passes (mirrors refresh.sh policy)
+ExecStart=/bin/bash -c 'python3 /opt/aegis-rag/rag_maint.py integrity && python3 /opt/aegis-rag/rag_maint.py backup --keep 5'

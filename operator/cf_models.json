@@ -1,0 +1,21 @@
+{
+  "_note": "Cloudflare Workers AI model roster for the board. Slugs are BEST-GUESS - run `python cf_agent.py list` (needs CF creds) to confirm the exact @cf/... ids available on your account, then correct any below. Friendly name -> CF slug.",
+  "kimi-k2.6": "@cf/moonshotai/kimi-k2.6",
+  "qwen3-30b-a3b-fp8": "@cf/qwen/qwen3-30b-a3b-fp8",
+  "qwq-32b": "@cf/qwen/qwq-32b",
+  "gpt-oss-120b": "@cf/openai/gpt-oss-120b",
+  "llama-3.3-70b": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "deepseek-v4-pro-cf": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+  "qwen2.5-coder-32b": "@cf/qwen/qwen2.5-coder-32b-instruct",
+  "llama-4-scout": "@cf/meta/llama-4-scout-17b-16e-instruct",
+  "kimi-k2.7-code": "@cf/moonshotai/kimi-k2.7-code",
+  "gpt-oss-20b": "@cf/openai/gpt-oss-20b",
+  "nemotron-120b": "@cf/nvidia/nemotron-3-120b-a12b",
+  "glm-5.3": "@cf/zai-org/glm-5.3",
+  "gemma-4-26b": "@cf/google/gemma-4-26b-a4b-it",
+  "mistral-small-24b": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+  "sea-lion-27b": "@cf/aisingapore/gemma-sea-lion-v4-27b-it",
+  "deepseek-r1-distill-32b": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+  "qwen3.8-27b": "@cf/qwen/qwen3.8-27b",
+  "granite-4-micro": "@cf/ibm-granite/granite-4.0-h-micro"
+}

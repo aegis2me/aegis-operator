@@ -1,0 +1,20 @@
+# Aegis Operator — PowerShell environment for the launchers.
+# Copy to  set-env.local.ps1  (gitignored) and fill in real values.
+# start-all.ps1 and the board viewer dot-source set-env.local.ps1 live at startup.
+
+# --- LLM provider for the operator co-pilot (OpenAI-compatible) ---
+$env:AEGIS_LLM_API_KEY  = "sk-your-key-here"
+$env:AEGIS_LLM_ENDPOINT = "https://api.deepseek.com"
+$env:AEGIS_MODEL        = "deepseek-v4-pro"
+# $env:AEGIS_EXECUTOR_MODEL = ""      # optional
+# $env:AEGIS_LLM_REASONING  = "none"  # none|low|medium|high
+
+# --- Optional extra board analysts ---
+$env:OPENAI_API_KEY = "sk-your-openai-key-here"   # Sol / GPT board member
+$env:CF_ACCOUNT_ID  = "your-32-hex-account-id"    # Cloudflare Workers AI
+$env:CF_API_TOKEN   = "your-workers-ai-token"
+
+# --- Runtime knobs (optional) ---
+# $env:AEGIS_PYTHON      = "C:\Path\to\python.exe"
+# $env:AEGIS_REQUIRE_VPN = "0"        # "1" to run the VPN preflight (needs vpn-ctl in Kali)
+# $env:AEGIS_VPN_REGION  = "United Kingdom"

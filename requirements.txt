@@ -1,0 +1,26 @@
+# Aegis Operator — merged Python dependencies (Python 3.12+)
+# Install:  python -m pip install -r requirements.txt
+
+# --- LLM / operator co-pilot ---
+openai>=1.0.0
+requests>=2.31.0
+typing-extensions>=4.7.0
+pydantic>=2.0.0
+rich>=14.0.0
+pyfiglet>=1.0.3
+prompt_toolkit>=3.0.0
+
+# --- orchestrator: bridge + MCP tool servers ---
+fastapi>=0.110.0
+uvicorn>=0.29.0
+fastmcp>=0.2.0
+langchain-openai>=0.1.0
+
+# --- browser automation (browser_use server) ---
+playwright>=1.44.0        # after install, run once:  python -m playwright install chromium
+
+# --- report rendering (render_*.py) ---
+fpdf2>=2.7.0
+
+# --- build ---
+setuptools>=42.0.0

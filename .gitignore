@@ -1,0 +1,114 @@
+# secrets — NEVER commit
+secret.env
+set-env.local.ps1
+*.key
+*.pem
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# runtime / state
+checkpoints/
+*.log
+*.log.err
+board/board_files/
+**/eg_runs/
+**/eg_board/
+aegis_operator_audit.log
+aegis_operator_ledger.json
+aegis_operator_memory.json*
+xdg/
+
+# findings/coverage stores are run artifacts (keep the code, not the data)
+*findings*.jsonl
+*coverage*.jsonl
+
+# os
+.DS_Store
+Thumbs.db
+
+# suggestion-test harness artifacts
+operator/suggestion_test_*.jsonl
+operator/_sugg_*.md
+operator/_demo_*.md
+
+# recon/replay run-artifacts
+operator/mirror_snapshots/
+operator/credexposure_*.jsonl
+operator/credreplay_*.jsonl
+
+operator/suggestions/
+operator/suggestion_test_*.jsonl
+
+exploitgym/techniques/technique_*.jsonl
+
+operator/collective_suggestions/
+
+# stage-10 remediation run artifacts (keep the code, not the generated fixes/report)
+operator/remediation_report.md
+operator/code_review_report.md
+operator/remediation_fixes/
+
+rag/learned_techniques.json
+operator/remediation_verify_report.md
+operator/post_update_report_*.md
+
+# local-only working docs + remaining run artifacts (keep local, never publish)
+docs/ARCHITECTURE_DIAGRAM.pdf
+operator/remediation_report_*.md
+operator/remediation_fixes_*/
+operator/retest_*.jsonl
+operator/record_*findings.py
+
+# self-learned co-occurrence rules (run artifact, like learned_techniques.json)
+rag/learned_cooccurrence.json
+rag/learned_hitrates.json
+
+# run-derived benchmark output (contains findings data)
+exploitgym/BENCHMARK.md
+operator/pentest_report.md
+exploitgym/BENCHMARK_RUN.md
+redteam/redteam_audit.jsonl
+redteam/redteam_findings.jsonl
+redteam/authorization.json
+
+# run-derived pass reports (findings data, kept local)
+*PassRun_Report*.md
+operator/passrun_report.md
+
+# secrets + any backups of them -- NEVER commit
+secret.env*
+*secret*.bak*
+
+# VPN configs/credentials -- NEVER commit (generic repo only)
+*.ovpn
+*vyprvpn*
+wg*.conf
+*wireguard*.conf
+vpn-auth*
+.config/vyprvpn/
+
+# generated ATT&CK technique data (populated by ingest_mitre.py; not committed)
+mitre_attack.json
+mitre_attack.json.*
+
+# red-team engagement scope artifacts (name real targets -- local only)
+redteam/authorization*.local.json
+redteam/authorization.json
+
+# local ExploitGym scenario copies (absolute paths -- machine-specific)
+exploitgym/scenarios/_*.json
+
+# ExploitGym run artifacts (audit logs, scorecards -- local only)
+exploitgym/eg_results/
+operator/greybox_board_hunt.py
+operator/campaigns/
+
+# session scratch + run artifacts (not source)
+scratchpad/
+aegis_discuss_test/
+operator/ledger_archive/

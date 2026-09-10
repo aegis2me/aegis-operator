@@ -1,0 +1,281 @@
+{
+ "arms": {
+  "authz": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "business_logic": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "idempotency": {
+   "n": 12,
+   "reward_sum": 9.900000000000002
+  },
+  "injection": {
+   "n": 1,
+   "reward_sum": 0.0
+  },
+  "ssrf": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "auth": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "race": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "mass_assignment": {
+   "n": 2,
+   "reward_sum": 0.15
+  },
+  "info_disclosure": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "supply_chain": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "misconfig": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "recon": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "t1046": {
+   "n": 7,
+   "reward_sum": 1.05
+  },
+  "t1592": {
+   "n": 6,
+   "reward_sum": 0.9
+  },
+  "t1195.001": {
+   "n": 4,
+   "reward_sum": 0.15
+  },
+  "authz+idempotency": {
+   "n": 4,
+   "reward_sum": 0.6
+  },
+  "t1195.002": {
+   "n": 4,
+   "reward_sum": 0.6
+  },
+  "false-negative": {
+   "n": 3,
+   "reward_sum": 0.44999999999999996
+  },
+  "ssti": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "path_traversal": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "race_condition": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "broken_object_level_authorization": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "nosql_injection": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "debug_endpoint_exposure": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "business-logic+toctou": {
+   "n": 6,
+   "reward_sum": 6.300000000000001
+  },
+  "authn": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "idempotency+race": {
+   "n": 7,
+   "reward_sum": 6.300000000000001
+  },
+  "mass-assignment+authz": {
+   "n": 5,
+   "reward_sum": 0.75
+  },
+  "idor": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "t1596": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "csrf": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "protocol_confusion": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "nosql injection": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "supply-chain": {
+   "n": 9,
+   "reward_sum": 8.15
+  },
+  "state_transition": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "broken-auth": {
+   "n": 4,
+   "reward_sum": 0.44999999999999996
+  },
+  "broken-auth/session-fixation": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "authz/idor": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "race-condition": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "t1087": {
+   "n": 2,
+   "reward_sum": 0.3
+  },
+  "broken-authentication": {
+   "n": 3,
+   "reward_sum": 0.3
+  },
+  "unvalidated-redirect": {
+   "n": 4,
+   "reward_sum": 0.6
+  },
+  "cross-site-request-forgery": {
+   "n": 3,
+   "reward_sum": 0.44999999999999996
+  },
+  "broken-object-level-authorization": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "nosql-injection": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "sensitive-data-exposure": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "business-logic-flaw": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "server-side-request-forgery": {
+   "n": 2,
+   "reward_sum": 0.15
+  },
+  "cross-site-scripting": {
+   "n": 3,
+   "reward_sum": 0.15
+  },
+  "resource-exhaustion+concurrency": {
+   "n": 2,
+   "reward_sum": 0.3
+  },
+  "server-side-template-injection": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "information-disclosure": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "auth-bypass/default-cred": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "misconfig/cors": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "mass-assignment": {
+   "n": 2,
+   "reward_sum": 0.3
+  },
+  "security-misconfiguration": {
+   "n": 2,
+   "reward_sum": 0.3
+  },
+  "improper-anti-automation": {
+   "n": 4,
+   "reward_sum": 5.2
+  },
+  "auth-default-cred": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "traversal": {
+   "n": 1,
+   "reward_sum": 0.0
+  },
+  "t1069": {
+   "n": 1,
+   "reward_sum": 0.0
+  },
+  "t1213": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "t1497": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "supply-chain/known-cve": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "supply-chain/known-cve+ssrf": {
+   "n": 0,
+   "reward_sum": 0.0
+  },
+  "t1211": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "t1593": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "t1018": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "concurrency": {
+   "n": 1,
+   "reward_sum": 0.15
+  },
+  "broken-object-level-authz": {
+   "n": 1,
+   "reward_sum": 0.15
+  }
+ },
+ "saved": "2026-09-10T13:03:34Z"
+}

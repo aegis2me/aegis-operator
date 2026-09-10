@@ -1,0 +1,61 @@
+{
+  "_note": "APPROXIMATE USD per 1,000,000 tokens ({in}=prompt/input, {out}=completion/output). VERIFY against the CURRENT price sheets before trusting the dollar total -- prices change and Cloudflare Workers AI bills in NEURONS (these are rough $/1M-token equivalents at the paid-plan neuron rate). Matching is by SUBSTRING of the model id, longest match wins; '_default' is the fallback. Token COUNTS are exact (from each API's usage block); only these unit prices are estimates. Edit freely.",
+  "prices": {
+    "deepseek-v4-pro": {
+      "in": 0.28,
+      "out": 0.42
+    },
+    "deepseek-v4-flash": {
+      "in": 0.07,
+      "out": 0.14
+    },
+    "deepseek-r1-distill": {
+      "in": 0.4,
+      "out": 0.6
+    },
+    "deepseek": {
+      "in": 0.28,
+      "out": 0.42
+    },
+    "gpt-5.6": {
+      "in": 1.25,
+      "out": 10.0
+    },
+    "gpt-oss-120b": {
+      "in": 0.35,
+      "out": 0.75
+    },
+    "gpt-oss-20b": {
+      "in": 0.2,
+      "out": 0.4
+    },
+    "qwen2.5-coder": {
+      "in": 0.4,
+      "out": 0.4
+    },
+    "qwq-32b": {
+      "in": 0.4,
+      "out": 0.6
+    },
+    "kimi": {
+      "in": 0.45,
+      "out": 0.7
+    },
+    "llama-3.3-70b": {
+      "in": 0.35,
+      "out": 0.45
+    },
+    "llama-4-scout": {
+      "in": 0.3,
+      "out": 0.4
+    },
+    "mistral-small": {
+      "in": 0.2,
+      "out": 0.4
+    },
+    "_default": {
+      "in": 0.4,
+      "out": 0.6
+    }
+  }
+}

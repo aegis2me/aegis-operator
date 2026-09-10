@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"This is the aegis-operator project -- a standalone, authorized, contained security-research + AI-operator stack (operator co-pilot + ExploitGym benchmark + oracle-verified findings + offline vuln RAG + multi-model board; self-contained, no external scheduler). Before running, testing, or reporting any assessment here -- driving the co-pilot (operator/aegis_operator.py), running ExploitGym, fanning out the code bench (code_suggester.py: qwen2.5-coder + gpt-oss-120b/20b + DeepSeek-v4-pro), testing suggestions (test_suggestions.py), credential-exposure/replay recon, or snapshotting the mirror -- load the aegis skill via the Skill tool (equivalently the /aegis command) for the operator playbook: the standalone architecture, the discovery pipeline (docs/PIPELINE.md), the tools, the board doctrine (many suggest, one executes+verifies), and the gotchas. Doctrine: contained mirror only, non-destructive (plant/write for proof, never erase), owned targets only. Reference docs in the repo root: README.md, INSTALL.md, docs/PIPELINE.md, docs/ARCHITECTURE_DIAGRAM.md, and .claude/skills/aegis/SKILL.md.\"}}'",
+            "statusMessage": "Loading aegis skill context..."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+[Unit]
+Description=aegis-rag DB readiness (ensure local vuln store is present + consistent)
+After=local-fs.target
+Wants=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/aegis-rag/rag-ensure.sh
+# never block the boot; the script self-logs and always exits 0
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

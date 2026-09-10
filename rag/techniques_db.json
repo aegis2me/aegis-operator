@@ -1,0 +1,721 @@
+{
+  "_note": "TECHNIQUES DATABASE for the operator/co-pilot (suggesting + checking) and the Kali driver stack. Complements the CVE RAG (NVD/KEV/EPSS/Exploit-DB) with the HOW: each technique class mapped to the Kali TOOL(s) and/or new CODE that test it, how to run an extensive+organized test, and the ORACLE that confirms. Deploy to /opt/aegis-rag; query with technique_search.py. Authorized/contained testing only; non-destructive by default.",
+  "version": "1.0",
+  "techniques": [
+    {
+      "id": "recon.fingerprint",
+      "class": "Recon",
+      "desc": "Identify stack, versions, framework, WAF",
+      "kali_tools": [
+        "nmap -sV",
+        "whatweb",
+        "httpx -td",
+        "wafw00f",
+        "nuclei -t technologies"
+      ],
+      "new_code": [
+        "operator fingerprint_target"
+      ],
+      "how_to_test": "service+version scan, HTTP tech fingerprint, WAF detect; feed versions to CVE RAG",
+      "oracle": "confirmed versions/tech recorded; drives known-vuln pass",
+      "applies_to": [
+        "any host/app"
+      ]
+    },
+    {
+      "id": "recon.content_discovery",
+      "class": "Recon",
+      "desc": "Find hidden dirs/files/endpoints/backups",
+      "kali_tools": [
+        "ffuf",
+        "feroxbuster",
+        "gobuster dir",
+        "dirsearch",
+        "nikto"
+      ],
+      "new_code": [],
+      "how_to_test": "wordlist brute of dirs/files incl backup/config extensions; recurse; note 200/403/redirect",
+      "oracle": "reachable sensitive path (backup, .git, admin, config) returns content",
+      "applies_to": [
+        "web app"
+      ]
+    },
+    {
+      "id": "recon.subdomains",
+      "class": "Recon",
+      "desc": "Enumerate subdomains / attack surface",
+      "kali_tools": [
+        "subfinder",
+        "amass",
+        "assetfinder",
+        "dnsx"
+      ],
+      "new_code": [],
+      "how_to_test": "passive+active subdomain enum; resolve; port/service scan the live ones",
+      "oracle": "new in-scope hosts discovered",
+      "applies_to": [
+        "domain"
+      ]
+    },
+    {
+      "id": "recon.exposed_source",
+      "class": "Recon",
+      "desc": "Accidentally exposed source (.git/.svn/backups/swap)",
+      "kali_tools": [
+        "git-dumper",
+        "ffuf (backup exts)",
+        "nuclei -t exposures"
+      ],
+      "new_code": [],
+      "how_to_test": "probe /.git/, /.svn/, backup.zip/.tar.gz/.sql, editor swap files",
+      "oracle": "source/backup downloadable -> real code (also a finding)",
+      "applies_to": [
+        "web app"
+      ],
+      "real_world_basis": "agents used exposed creds/source"
+    },
+    {
+      "id": "inj.sqli",
+      "class": "Injection",
+      "desc": "SQL injection",
+      "kali_tools": [
+        "sqlmap",
+        "ghauri"
+      ],
+      "new_code": [],
+      "how_to_test": "sqlmap on params/JSON/headers/cookies; --level/--risk up; --batch; test auth'd + per role",
+      "oracle": "boolean/error/time/union confirms; sqlmap dumps a controlled value; DB oracle",
+      "applies_to": [
+        "param -> SQL"
+      ]
+    },
+    {
+      "id": "inj.nosqli",
+      "class": "Injection",
+      "desc": "NoSQL injection (Mongo/JSON operators)",
+      "kali_tools": [
+        "nosqlmap"
+      ],
+      "new_code": [
+        "operator crafted payloads"
+      ],
+      "how_to_test": "inject $ne/$gt/$where/[$regex] in JSON bodies + query params",
+      "oracle": "auth bypass or data returned that differs from control",
+      "applies_to": [
+        "Mongo/JSON APIs"
+      ]
+    },
+    {
+      "id": "inj.cmd",
+      "class": "Injection",
+      "desc": "OS command injection",
+      "kali_tools": [
+        "commix"
+      ],
+      "new_code": [],
+      "how_to_test": "inject ;/|/`$()` with a benign marker (sleep, callback) into params reaching a shell",
+      "oracle": "time-delay or callback fires (blind); or command output reflected",
+      "applies_to": [
+        "param -> shell/exec"
+      ]
+    },
+    {
+      "id": "inj.ssti",
+      "class": "Injection",
+      "desc": "Server-side template injection",
+      "kali_tools": [
+        "tplmap"
+      ],
+      "new_code": [
+        "techniques/probe_techniques.py ssti"
+      ],
+      "how_to_test": "inject {{7*7}} ${7*7} #{7*7} <%=7*7%> into fields rendered by a template engine; escalate to RCE per engine",
+      "oracle": "output shows 49 (evaluated) not the literal; RCE marker fires",
+      "applies_to": [
+        "template render of input"
+      ],
+      "real_world_basis": "a file-reference layer + template engine -> RCE"
+    },
+    {
+      "id": "inj.xxe",
+      "class": "Injection",
+      "desc": "XML external entity",
+      "kali_tools": [
+        "manual",
+        "nuclei -t xxe"
+      ],
+      "new_code": [],
+      "how_to_test": "submit XML with external entity to a loopback/callback or file:///etc/passwd",
+      "oracle": "file content returned or callback fires",
+      "applies_to": [
+        "XML parser"
+      ]
+    },
+    {
+      "id": "inj.template_email_pdf",
+      "class": "Injection",
+      "desc": "HTML/markup injection into email/PDF sinks",
+      "kali_tools": [
+        "manual"
+      ],
+      "new_code": [
+        "ExploitGym D2"
+      ],
+      "how_to_test": "inject markup into names/notes/desc that flow into email HTML or PDF; render in a mail sink/browser",
+      "oracle": "markup executes in rendered email/PDF (else clean if text-only)",
+      "applies_to": [
+        "nodemailer html",
+        "html-to-pdf"
+      ],
+      "real_world_basis": "attacker-controlled fields in outputs"
+    },
+    {
+      "id": "xss.reflected_stored",
+      "class": "XSS",
+      "desc": "Reflected/stored/DOM XSS",
+      "kali_tools": [
+        "dalfox",
+        "XSStrike"
+      ],
+      "new_code": [
+        "playwright DOM oracle"
+      ],
+      "how_to_test": "dalfox on params + stored fields; check reflection contexts; DOM sinks",
+      "oracle": "payload executes in a real browser DOM (alert/marker), not just reflected text",
+      "applies_to": [
+        "HTML/JS sinks"
+      ]
+    },
+    {
+      "id": "ssrf.outbound",
+      "class": "SSRF",
+      "desc": "Server-side request forgery / egress",
+      "kali_tools": [
+        "nuclei -t ssrf + interactsh",
+        "gopherus",
+        "interactsh-client"
+      ],
+      "new_code": [
+        "techniques/probe_techniques.py ssrf"
+      ],
+      "how_to_test": "point a server-side fetch (webhook, url param, settings host) at a collaborator callback or internal/metadata (169.254.169.254)",
+      "oracle": "callback listener receives a hit (blind); or internal-only content reflected; grey-box: fetch not behind an SSRF allow-list",
+      "applies_to": [
+        "server-side URL fetch"
+      ],
+      "real_world_basis": "SSRF via an artifact repository = egress path"
+    },
+    {
+      "id": "access.idor",
+      "class": "AccessControl",
+      "desc": "IDOR / cross-account object access",
+      "kali_tools": [
+        "Burp/manual",
+        "autorize-style diff"
+      ],
+      "new_code": [
+        "techniques/probe_techniques.py idor",
+        "credential_replay.py"
+      ],
+      "how_to_test": "as role B, request role A's object IDs across every resource; compare per-role",
+      "oracle": "200 returning another owner's data where it should be 403/404",
+      "applies_to": [
+        "resource-by-id"
+      ],
+      "real_world_basis": "cross-tenant token/object reuse"
+    },
+    {
+      "id": "access.authz_matrix",
+      "class": "AccessControl",
+      "desc": "Missing/over-broad role gating (SoD)",
+      "kali_tools": [
+        "manual"
+      ],
+      "new_code": [
+        "authz matrix / role sweep",
+        "credential_replay.py"
+      ],
+      "how_to_test": "every role x every endpoint x {read,write,delete}; diff against intended matrix",
+      "oracle": "a role reaches an endpoint it should not (200 vs expected 403)",
+      "applies_to": [
+        "role-gated routers"
+      ]
+    },
+    {
+      "id": "authn.brute_spray",
+      "class": "Authn",
+      "desc": "Credential brute/spray",
+      "kali_tools": [
+        "hydra",
+        "medusa",
+        "patator"
+      ],
+      "new_code": [],
+      "how_to_test": "spray common/leaked creds at login with lockout awareness; rate-limit test",
+      "oracle": "successful auth; or no lockout (rate-limit finding)",
+      "applies_to": [
+        "login"
+      ]
+    },
+    {
+      "id": "authn.jwt",
+      "class": "Authn",
+      "desc": "JWT/token forgery & flaws",
+      "kali_tools": [
+        "jwt_tool"
+      ],
+      "new_code": [],
+      "how_to_test": "test alg=none, key-confusion (RS->HS), weak secret crack, kid injection, expiry/replay",
+      "oracle": "forged/altered token accepted by the server",
+      "applies_to": [
+        "JWT auth"
+      ],
+      "real_world_basis": "forged admin JWT via stolen signing key"
+    },
+    {
+      "id": "authn.oauth",
+      "class": "Authn",
+      "desc": "OAuth/session flaws",
+      "kali_tools": [
+        "manual"
+      ],
+      "new_code": [],
+      "how_to_test": "state/PKCE, redirect_uri, token/company binding, session fixation, logout invalidation",
+      "oracle": "CSRF/account-link works, or session survives logout",
+      "applies_to": [
+        "oauth/session"
+      ]
+    },
+    {
+      "id": "deser.rce",
+      "class": "Deserialization",
+      "desc": "Insecure deserialization -> RCE",
+      "kali_tools": [
+        "ysoserial (Java)",
+        "phpggc (PHP)"
+      ],
+      "new_code": [
+        "node-serialize/js-yaml payloads"
+      ],
+      "how_to_test": "submit crafted serialized object with a benign side-effect marker to a deser sink (import/config/cookie)",
+      "oracle": "marker fires (callback/file/DB) proving code path executed",
+      "applies_to": [
+        "untrusted deserialization"
+      ],
+      "real_world_basis": "a package-registry Marshal deser -> RCE"
+    },
+    {
+      "id": "file.lfi_traversal",
+      "class": "FileAccess",
+      "desc": "Path traversal / LFI / file disclosure",
+      "kali_tools": [
+        "ffuf (LFI wordlists)",
+        "nuclei -t lfi"
+      ],
+      "new_code": [
+        "techniques/probe_techniques.py path_traversal"
+      ],
+      "how_to_test": "dot-segment/encoded traversal (../ ..%2f ....//) on file-by-name/report/download endpoints; PHP wrappers",
+      "oracle": "out-of-scope file content returned (e.g., /etc/passwd marker)",
+      "applies_to": [
+        "file serve by name"
+      ],
+      "real_world_basis": "a scientific data-file /proc/self/environ disclosure"
+    },
+    {
+      "id": "file.upload",
+      "class": "FileAccess",
+      "desc": "Unsafe upload / content-trust",
+      "kali_tools": [
+        "manual",
+        "fuxploider"
+      ],
+      "new_code": [],
+      "how_to_test": "upload crafted-but-valid files (webshell ext bypass, polyglot, malicious CSV/IIF/backup/dataset) that rewrite data or trigger parser side-effects",
+      "oracle": "DB reflects planted content, or parser executes/discloses",
+      "applies_to": [
+        "upload/import/restore"
+      ],
+      "real_world_basis": "crafted dataset processed by worker returned secrets"
+    },
+    {
+      "id": "export.formula_injection",
+      "class": "OutputInjection",
+      "desc": "CSV/IIF spreadsheet formula injection",
+      "kali_tools": [
+        "manual"
+      ],
+      "new_code": [],
+      "how_to_test": "set a user field to =/+/-/@ or DDE payload; export; inspect bytes",
+      "oracle": "formula prefix survives unescaped into the exported file",
+      "applies_to": [
+        "csv/iif/xls export"
+      ]
+    },
+    {
+      "id": "logic.money_bounds",
+      "class": "BusinessLogic",
+      "desc": "Money/quantity validation bypass (negative/overflow/state)",
+      "kali_tools": [
+        "manual"
+      ],
+      "new_code": [
+        "ExploitGym D1",
+        "race_money.py",
+        "pattern_generalizer.sh"
+      ],
+      "how_to_test": "negative/overflow/non-finite values across every money field + entity; copy-path bypass; unguarded state transitions",
+      "oracle": "DB persists invalid money (negative/overflow) or a disallowed state",
+      "applies_to": [
+        "money endpoints"
+      ]
+    },
+    {
+      "id": "logic.idempotency_replay",
+      "class": "BusinessLogic",
+      "desc": "Missing idempotency / replay",
+      "kali_tools": [
+        "manual (repeat requests)"
+      ],
+      "new_code": [
+        "test_suggestions replay"
+      ],
+      "how_to_test": "replay the same money-mutation POST N times (sequential + concurrent)",
+      "oracle": "duplicate rows created (double-billing) with no 409/dedup",
+      "applies_to": [
+        "money POSTs"
+      ]
+    },
+    {
+      "id": "logic.race",
+      "class": "BusinessLogic",
+      "desc": "Concurrency/race on money paths",
+      "kali_tools": [
+        "manual (barrier)"
+      ],
+      "new_code": [
+        "race_money.py"
+      ],
+      "how_to_test": "fire N concurrent requests at a check-then-write path (payment ceiling, allocation)",
+      "oracle": "invariant violated under concurrency (over-payment, double-invoice)",
+      "applies_to": [
+        "check-then-write"
+      ]
+    },
+    {
+      "id": "deps.known_cve",
+      "class": "KnownVuln",
+      "desc": "Known-CVE in a dependency/component",
+      "kali_tools": [
+        "searchsploit",
+        "nuclei -t cves",
+        "metasploit"
+      ],
+      "new_code": [
+        "rag_search",
+        "exploit_search"
+      ],
+      "how_to_test": "fingerprint -> CVE RAG -> fire matching nuclei/msf/searchsploit exploit against the twin",
+      "oracle": "exploit fires on the twin (refuted if not, unless twin diverges)",
+      "applies_to": [
+        "versioned components"
+      ]
+    },
+    {
+      "id": "secrets.exposure",
+      "class": "Secrets",
+      "desc": "Leaked creds/secrets (repos, breaches, web)",
+      "kali_tools": [
+        "trufflehog",
+        "gitleaks"
+      ],
+      "new_code": [
+        "credential_exposure.py",
+        "credential_replay.py"
+      ],
+      "how_to_test": "scan repos/pastes/breaches/web for owned-domain creds; validate + replay",
+      "oracle": "cred authenticates; escalation battery confirms impact",
+      "applies_to": [
+        "owned domains/repos"
+      ],
+      "real_world_basis": "publicly-exposed third-party creds reused"
+    },
+    {
+      "id": "exfil.staging",
+      "class": "Exfil",
+      "desc": "Data staging / pull-based C2 via shared store",
+      "kali_tools": [
+        "manual"
+      ],
+      "new_code": [],
+      "how_to_test": "check if a low-priv role can stage data into a store readable by an unauthorized party (public repo/bucket/export)",
+      "oracle": "planted marker readable from the unauthorized side",
+      "applies_to": [
+        "shared/public writable store"
+      ],
+      "real_world_basis": "public dataset used as C2/exfil"
+    },
+    {
+      "id": "privesc.host_container",
+      "class": "PrivEsc",
+      "desc": "Host/container privilege escalation",
+      "kali_tools": [
+        "linpeas",
+        "linux-exploit-suggester",
+        "kernel CVE PoCs"
+      ],
+      "new_code": [],
+      "how_to_test": "enumerate SUID/caps/kernel/misconfig; kubelet/TokenRequest for k8s; run in the twin only",
+      "oracle": "root/host or cluster-admin obtained in ground truth",
+      "applies_to": [
+        "host/container/k8s"
+      ],
+      "real_world_basis": "kernel CVE + kubelet -> host/cluster-admin"
+    },
+    {
+      "id": "net.rate_dos",
+      "class": "Availability",
+      "desc": "Rate-limit / resource / unbounded-response DoS",
+      "kali_tools": [
+        "manual (loops)",
+        "ab/wrk"
+      ],
+      "new_code": [],
+      "how_to_test": "unthrottled mutation loops; unpaginated list growth; numeric-overflow 500s; slow endpoints",
+      "oracle": "no rate-limit / unbounded response / hung request under volume",
+      "applies_to": [
+        "mutation + list endpoints"
+      ]
+    },
+    {
+      "id": "discovery.ldap",
+      "class": "ldap",
+      "desc": "AD/LDAP/Kerberos enumeration (users, SPNs, adminCount, delegation, trusts)",
+      "kali_tools": [
+        "ldapsearch",
+        "bloodhound-python",
+        "impacket-GetUserSPNs",
+        "enum4linux"
+      ],
+      "new_code": [
+        "operator/discovery.py ldap"
+      ],
+      "how_to_test": "anonymous or credentialed bind to the DC; query servicePrincipalName / adminCount=1 / TRUSTED_FOR_DELEGATION; map to ATT&CK T1087.002/T1069.002",
+      "oracle": "bind succeeds AND entries/SPNs returned",
+      "applies_to": [
+        "Active Directory",
+        "LDAP",
+        "Kerberos"
+      ],
+      "real_world_basis": "kerberoasting + AD recon are the backbone of CS/BloodHound tradecraft"
+    },
+    {
+      "id": "discovery.cloud",
+      "class": "cloud",
+      "desc": "Cloud/container discovery (AWS/Azure/GCP IAM, buckets, instances, managed identities)",
+      "kali_tools": [
+        "aws-cli",
+        "az",
+        "gcloud",
+        "ScoutSuite",
+        "prowler"
+      ],
+      "new_code": [
+        "operator/discovery.py cloud"
+      ],
+      "how_to_test": "with a credential, enumerate STS identity, IAM roles/policies, storage buckets, compute; T1526/T1580",
+      "oracle": "cloud API returns caller identity + resource list",
+      "applies_to": [
+        "AWS",
+        "Azure",
+        "GCP",
+        "Kubernetes"
+      ],
+      "real_world_basis": "cloud attack surface is where CS/MSF cloud modules focus"
+    },
+    {
+      "id": "discovery.fingerprint",
+      "class": "fingerprint",
+      "desc": "Mass service/version/TLS fingerprinting feeding CVE correlation",
+      "kali_tools": [
+        "nmap -sV",
+        "masscan",
+        "nmap --script ssl-enum-ciphers",
+        "jarm"
+      ],
+      "new_code": [
+        "operator/discovery.py fingerprint"
+      ],
+      "how_to_test": "-sV version scan + TLS cipher/JARM; feed banners to the RAG for CVE mapping; T1046",
+      "oracle": "open service with a version banner",
+      "applies_to": [
+        "network",
+        "TLS"
+      ],
+      "real_world_basis": "Nmap/Masscan-grade enumeration is table stakes for MSF/CS recon"
+    },
+    {
+      "id": "discovery.external",
+      "class": "external",
+      "desc": "External/passive attack-surface mapping (CT logs, passive DNS, subdomains)",
+      "kali_tools": [
+        "curl crt.sh",
+        "subfinder",
+        "amass",
+        "dnsx"
+      ],
+      "new_code": [
+        "operator/discovery.py external"
+      ],
+      "how_to_test": "OWNED domain only: pull %.<domain> from crt.sh, resolve, seed further probes; T1590/T1596",
+      "oracle": "subdomains discovered from CT logs",
+      "applies_to": [
+        "external",
+        "OSINT"
+      ],
+      "real_world_basis": "Shodan/Censys/CT-log surface mapping; owned-domain OSINT lane"
+    },
+    {
+      "id": "discovery.cred_harvest",
+      "class": "cred_harvest",
+      "desc": "Credentialed file/config/secret discovery over SMB shares (read-only)",
+      "kali_tools": [
+        "smbclient",
+        "enum4linux",
+        "crackmapexec"
+      ],
+      "new_code": [
+        "operator/discovery.py cred_harvest"
+      ],
+      "how_to_test": "list shares, spider filenames, flag .env/.pem/.key/config/kdbx; NEVER download/write; T1039/T1552.001",
+      "oracle": "readable share AND a secret-looking file present",
+      "applies_to": [
+        "SMB",
+        "file shares"
+      ],
+      "real_world_basis": "share spidering for secrets is core post-foothold recon"
+    },
+    {
+      "id": "discovery.sbom",
+      "class": "sbom",
+      "desc": "Source-level supply-chain: lockfile deps vs known CVEs (complements image grype)",
+      "kali_tools": [
+        "syft",
+        "pip-audit",
+        "osv-scanner"
+      ],
+      "new_code": [
+        "operator/discovery.py sbom"
+      ],
+      "how_to_test": "parse requirements.txt/package-lock.json/go.sum; query the offline RAG per dep; T1195.001",
+      "oracle": "a lockfile dependency matches a known CVE",
+      "applies_to": [
+        "dependencies",
+        "supply-chain"
+      ],
+      "real_world_basis": "transitive-dep CVEs are a top real-world entry vector"
+    },
+    {
+      "id": "discovery.rag_infer",
+      "class": "rag_infer",
+      "desc": "NOVEL: cross-domain RAG inference of a hidden surface from uncorrelated signals",
+      "kali_tools": [],
+      "new_code": [
+        "operator/discovery.py rag_infer"
+      ],
+      "how_to_test": "correlate TLS SANs + leaked keys + headers across gathered findings to infer an unprobed surface, then confirm by probing; T1592/T1595",
+      "oracle": "the inferred hidden surface returns 2xx",
+      "applies_to": [
+        "cross-domain",
+        "inference"
+      ],
+      "real_world_basis": "beyond every listed tool: none correlate across evidence domains"
+    },
+    {
+      "id": "discovery.authz_fuzz",
+      "class": "authz_fuzz",
+      "desc": "NOVEL: grey-box fuzzing of auth/authz LOGIC (JWT alg=none, stripped sig, tampered claims)",
+      "kali_tools": [
+        "jwt_tool"
+      ],
+      "new_code": [
+        "operator/discovery.py authz_fuzz"
+      ],
+      "how_to_test": "mutate a captured JWT and replay to a protected path; a mutation ACCEPTED (2xx) is a bypass; T1211/T1078",
+      "oracle": "a tampered token is accepted where a valid one is required",
+      "applies_to": [
+        "JWT",
+        "OAuth",
+        "auth"
+      ],
+      "real_world_basis": "fuzzing auth logic, not memory-safe parsers -- novel"
+    },
+    {
+      "id": "discovery.depconf",
+      "class": "depconf",
+      "desc": "NOVEL: dependency-confusion / typosquat detection vs live registry",
+      "kali_tools": [
+        "curl"
+      ],
+      "new_code": [
+        "operator/discovery.py depconf"
+      ],
+      "how_to_test": "for each internal-looking dep, check if the name is CLAIMABLE (404) on PyPI/npm; T1195.002",
+      "oracle": "an internal dependency name is unclaimed on the public registry",
+      "applies_to": [
+        "dependencies",
+        "supply-chain"
+      ],
+      "real_world_basis": "dependency confusion is a live class no scanner in the set flags proactively"
+    },
+    {
+      "id": "discovery.honeypot",
+      "class": "honeypot",
+      "desc": "NOVEL: deception-aware discovery via response timing/error baselining",
+      "kali_tools": [],
+      "new_code": [
+        "operator/discovery.py honeypot"
+      ],
+      "how_to_test": "probe distinct + random paths, baseline timing/length/code variance; near-zero variance = decoy; T1497",
+      "oracle": "uniform length AND code across distinct paths with ~0 timing variance",
+      "applies_to": [
+        "deception",
+        "IDS"
+      ],
+      "real_world_basis": "telling real surface from bait -- a modern red-team need none of the set automate"
+    },
+    {
+      "id": "discovery.attackpath",
+      "class": "attackpath",
+      "desc": "NOVEL: graph attack-path analysis over confirmed discovery findings",
+      "kali_tools": [],
+      "new_code": [
+        "operator/discovery.py attackpath"
+      ],
+      "how_to_test": "build a reach graph from verified findings; BFS to the goal node; T1069/T1018",
+      "oracle": "a confirmed path to the goal exists",
+      "applies_to": [
+        "graph",
+        "attack-path"
+      ],
+      "real_world_basis": "BloodHound-style pathing, driven by ORACLE-confirmed edges rather than raw ACLs"
+    },
+    {
+      "id": "stateful.replay_mutation",
+      "class": "Business-Logic / Stateful",
+      "desc": "Replay a state-mutating request N times; a non-idempotent handler with no total<=bound invariant over-applies the effect (e.g. duplicate/over-credit, double refund, double-settle).",
+      "kali_tools": [],
+      "new_code": [
+        "vectors.stateful (action=stateful, oracle=invariant|idempotency)"
+      ],
+      "how_to_test": "setup a target record; MEASURE a business metric; REPLAY the mutation N>1x; measure again; oracle: idempotency (metric grows >1 unit) or invariant (sum<=bound violated after).",
+      "oracle": "InvariantOracle (measured<=bound held before, violated after) OR IdempotencyOracle (delta>unit across N replays)",
+      "applies_to": [
+        "money mutations",
+        "credit-notes/refunds",
+        "payments/deposits",
+        "any create/mutate endpoint lacking idempotency"
+      ]
+    }
+  ]
+}
