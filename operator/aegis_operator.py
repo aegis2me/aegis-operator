@@ -322,8 +322,11 @@ def t_resume(task_id, note=""):
     p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
     return json.dumps({"stdout": p.stdout[-1500:], "stderr": p.stderr[-600:], "rc": p.returncode})
 
-def t_vpn_ctl(action, region="United Kingdom"):
-    args = ["vpn-ctl", action] + ([region] if action in ("connect", "ensure") else [])
+def t_vpn_ctl(action, region=None):
+    # No region/country is baked in. The VPN is an OPTIONAL lab convenience for the tester's OWN egress
+    # (region/retry) only; a region is used solely if the caller/env supplies one -- nothing here defaults
+    # to, or discloses, any location.
+    args = ["vpn-ctl", action] + ([region] if (region and action in ("connect", "ensure")) else [])
     p = subprocess.run(["wsl", "-d", "kali-linux", "-u", "root", "--"] + args,
                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
     return json.dumps({"stdout": p.stdout[-1500:], "stderr": p.stderr[-500:], "rc": p.returncode})

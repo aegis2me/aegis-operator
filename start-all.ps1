@@ -44,9 +44,12 @@ Write-Output "wsl: $(((wsl -l -v | Out-String) -replace "`0","" -replace '\s+','
 # --- Optional VPN preflight (off by default; a lab convenience, needs vpn-ctl in Kali) ---
 $vpnRequire = $env:AEGIS_REQUIRE_VPN
 if ($vpnRequire -match '^(?i)(1|true|yes|on)$') {
-    $vpnRegion = $env:AEGIS_VPN_REGION; if ([string]::IsNullOrEmpty($vpnRegion)) { $vpnRegion = "United Kingdom" }
-    Write-Output "[vpn] ensuring tunnel (region=$vpnRegion)..."
-    wsl -d kali-linux -u root -- vpn-ctl ensure "$vpnRegion" 2>&1 | Out-Null
+    $vpnRegion = $env:AEGIS_VPN_REGION   # no country baked in -- must be set explicitly by the user
+    if ([string]::IsNullOrEmpty($vpnRegion)) {
+        Write-Warning "[vpn] AEGIS_REQUIRE_VPN=1 but AEGIS_VPN_REGION is unset -- set it to use a region, or leave off."
+    }
+    Write-Output "[vpn] ensuring tunnel$(if($vpnRegion){" (region=$vpnRegion)"})..."
+    wsl -d kali-linux -u root -- vpn-ctl ensure @($vpnRegion | Where-Object { $_ }) 2>&1 | Out-Null
     $vpnStatus = (wsl -d kali-linux -u root -- vpn-ctl status 2>&1 | Out-String)
     if ($vpnStatus -match 'VPN:\s*active') { Write-Output "[vpn] tunnel UP" }
     else { Write-Warning "[vpn] tunnel did NOT come up -- start it manually if your target needs it." }
