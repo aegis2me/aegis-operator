@@ -918,6 +918,21 @@ def t_run_in_kali(command):
     except Exception as e:
         return json.dumps({"error": repr(e)[:200]})
 
+def t_run_tool(tool, args=""):
+    """Run an external pentest TOOL by name, AUTO-ROUTING to the distro that has it: present in Kali -> Kali;
+    MISSING -> the BlackArch container (prebuilt via pacman, native env), NOT ported into Kali. Gated. Use for
+    any off-the-shelf CLI security tool (feroxbuster, katana, dalfox, nuclei, sn0int, ...); `args` is the arg
+    string (e.g. '-u https://target -k'). This is the LAZY tool-provisioning hook -- a missing tool is fetched
+    on demand in BlackArch and run there. Non-destructive scope still applies to what you point it at."""
+    try:
+        import distro_backend
+        r = distro_backend.run_tool(tool, args)
+        return json.dumps({"backend": r["backend"], "rc": r["rc"],
+                           "stdout": r["stdout"][-4000:], "stderr": r["stderr"][-1000:]})
+    except Exception as e:
+        return json.dumps({"error": repr(e)[:200]})
+
+
 def t_install_kali_tool(name, content, interpreter="python3", pip_deps=None):
     """Install a co-pilot-AUTHORED tool into Kali's /usr/local/bin so it becomes a callable command. Stages the
     script in the repo (version-controllable), then copies it into Kali, strips CRLF, chmod +x, and optionally
@@ -1687,6 +1702,12 @@ TOOLS = {
  "run_in_kali": (t_run_in_kali, False, _spec("run_in_kali",
     "Run a shell command INSIDE Kali (login shell, VPN egress). Gated. Test a custom PoC against an authorized "
     "target, or build tooling in Kali.", {"command": {"type": "string"}}, ["command"])),
+ "run_tool": (t_run_tool, False, _spec("run_tool",
+    "Run an external pentest TOOL by name, AUTO-ROUTING to the distro that has it: present in Kali -> Kali; "
+    "MISSING -> the BlackArch container (prebuilt via pacman, native), fetched on demand -- NOT ported into "
+    "Kali. Gated. Prefer this over run_in_kali for any off-the-shelf CLI tool (feroxbuster, katana, dalfox, "
+    "nuclei, sn0int, ...). args = the argument string.",
+    {"tool": {"type": "string"}, "args": {"type": "string"}}, ["tool"])),
  "install_kali_tool": (t_install_kali_tool, False, _spec("install_kali_tool",
     "Install a co-pilot-authored tool into Kali's /usr/local/bin (staged in the repo first). Gated. For a novel "
     "checker/PoC when no off-the-shelf tool exists.",
@@ -1904,7 +1925,7 @@ _CTX = {}  # shared agent context (client/model/thinking/gate/depth) for sub-age
 COMPACT_THRESHOLD = int(os.environ.get("AEGIS_COMPACT_THRESHOLD", "60000"))  # transcript chars before we summarize older turns (env-overridable, e.g. to force/test compaction)
 CHAT_MAX_ITER = 60         # max reason/act cycles per chat turn (room to babysit within a turn)
 # tools where repeating the SAME call is thrash (polling tools like read_task_context are excluded)
-_LOOP_GUARD_TOOLS = {"run_command", "run_background", "apply_edit", "write_file", "submit_aegis_task"}
+_LOOP_GUARD_TOOLS = {"run_command", "run_background", "apply_edit", "write_file", "submit_aegis_task", "run_tool"}
 
 def _save_session(path, messages):
     """Persist the chat transcript + plan so a session can be resumed later. Atomic write."""
@@ -2069,7 +2090,7 @@ def _agent_loop(client, model, thinking, messages, allowed_names, max_iter, gate
             if name in ("record_finding", "chain_state"):      # record-as-you-go tracking
                 turns_since_record = 0
                 interacted_since_record = False
-            elif name in ("run_in_kali", "run_command", "run_background", "fetch_url", "render_page"):
+            elif name in ("run_in_kali", "run_command", "run_background", "fetch_url", "render_page", "run_tool"):
                 interacted_since_record = True
                 mutated_unverified = False   # an exercise/verify step -> a prior edit is now being tested
             try:

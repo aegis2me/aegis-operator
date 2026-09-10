@@ -136,36 +136,67 @@ def run_in_blackarch(cmd, ensure_tools=None, keep_up=False, timeout=1800):
 
 # ---------------- the router ----------------
 def route(tool):
-    """Decide the backend for a tool: kali if present there; else blackarch if native; else install-in-kali."""
+    """Decide the backend for a tool. Policy (user-set): a tool PRESENT in Kali runs in Kali; anything MISSING
+    goes to BLACKARCH (prebuilt via pacman, native environment) -- NOT ported into Kali (source-builds OOM /
+    Arch-native tools don't adapt cleanly). Kali-install is only a last-resort fallback if BlackArch lacks it."""
     if have_kali(tool):
         return "kali"
-    if tool in DISTRO_TOOLS.get("blackarch", set()):
-        return "blackarch"
-    return "install"   # let kali_tool_extend try to install it into Kali
+    return "blackarch"   # missing -> BlackArch (prebuilt/native), preferred over porting into Kali
+
+
+def pacman_has(tool):
+    """Is the tool an installable BlackArch/Arch package? (queried in the container; container left stopped)."""
+    if not _ensure_container():
+        return False
+    _start()
+    rc, out, _ = _kali(f"docker exec {BLACKARCH_CTR} bash -lc 'pacman -Ssq ^{tool}$ 2>/dev/null | head -1'", 300)
+    _stop()
+    return bool(out.strip())
 
 
 def run_tool(tool, argv, timeout=1800):
-    """Run `tool argv...` in the right backend (board abstraction: callers are distro-agnostic)."""
+    """Run `tool argv...` in the right backend (distro-agnostic API). MISSING tools run in BlackArch; Kali
+    install is only tried if BlackArch does not provide the tool."""
     backend = route(tool)
     line = f"{tool} {argv}" if isinstance(argv, str) else " ".join([tool] + list(argv))
     if backend == "kali":
         rc, out, err = _kali(line, timeout)
-    elif backend == "blackarch":
+    else:  # blackarch (preferred for missing)
         rc, out, err = run_in_blackarch(line, ensure_tools=[tool], timeout=timeout)
-    else:
-        # install-on-demand into Kali, then run
-        try:
-            sys.path.insert(0, HERE); import kali_tool_extend
-            res = kali_tool_extend.install(tool)
-            if res.get("status") in ("installed", "present"):
-                rc, out, err = _kali(line, timeout); backend = "kali(installed)"
-            else:
-                # fall back to BlackArch container if Kali install didn't land
-                rc, out, err = run_in_blackarch(line, ensure_tools=[tool], timeout=timeout); backend = "blackarch(fallback)"
-        except Exception as e:
-            rc, out, err = 127, "", f"router install failed: {e}"
+        # last-resort: if BlackArch has no such package, fall back to a Kali install then run
+        if rc != 0 and ("command not found" in (out + err).lower() or "target not found" in (out + err).lower()):
+            try:
+                sys.path.insert(0, HERE); import kali_tool_extend
+                res = kali_tool_extend.install(tool)
+                if res.get("status") in ("installed", "present"):
+                    rc, out, err = _kali(line, timeout); backend = "kali(fallback-install)"
+            except Exception as e:
+                err = (err or "") + f" | kali-fallback failed: {e}"
     _audit({"router": True, "tool": tool, "backend": backend, "rc": rc})
     return {"tool": tool, "backend": backend, "rc": rc, "stdout": out[-4000:], "stderr": err[-1000:]}
+
+
+def preflight(tools):
+    """PRE-FLIGHT provisioning: given the tools a planned run will need, ensure each is available in its
+    backend BEFORE the run -- Kali ones are already there; MISSING ones are pacman-installed into the
+    BlackArch container in ONE batch (container started once, tools persist, stopped after). Returns a
+    manifest {tool: backend}. Avoids mid-run stalls (board: pre-flight for declared tools)."""
+    manifest, need_ba = {}, []
+    for t in tools:
+        b = route(t)
+        manifest[t] = b
+        if b == "blackarch":
+            need_ba.append(t)
+    if need_ba:
+        if _ensure_container():
+            _start()
+            tl = " ".join(need_ba)
+            _kali(f"docker exec {BLACKARCH_CTR} bash -lc 'pacman -Sy --noconfirm --needed {tl} >/dev/null 2>&1'", 1800)
+            _stop()   # provisioned; container back to 0 RAM until a probe needs it
+        _audit({"preflight": True, "tools": list(tools), "blackarch_provisioned": need_ba})
+    print(f"[preflight] {len(tools)} tool(s): "
+          + ", ".join(f"{t}->{b}" for t, b in manifest.items()))
+    return manifest
 
 
 def main():
@@ -176,6 +207,7 @@ def main():
     sub.add_parser("status")
     pr = sub.add_parser("route"); pr.add_argument("tool")
     rt = sub.add_parser("run"); rt.add_argument("tool"); rt.add_argument("args", nargs=argparse.REMAINDER)
+    pf = sub.add_parser("preflight"); pf.add_argument("tools", nargs="+")
     a = ap.parse_args()
     if a.cmd == "pull-blackarch":
         print(json.dumps({"pulled": pull_blackarch()}))
@@ -186,6 +218,8 @@ def main():
         print(json.dumps({"tool": a.tool, "backend": route(a.tool)}))
     elif a.cmd == "run":
         print(json.dumps(run_tool(a.tool, a.args), indent=2, default=str))
+    elif a.cmd == "preflight":
+        print(json.dumps(preflight(a.tools), indent=2, default=str))
 
 
 if __name__ == "__main__":

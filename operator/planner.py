@@ -780,6 +780,23 @@ def plan_session(objective, target, *, roles=None, surfaces=None, stack=None,
         for pl in plans:
             for m in pl["seed_moves"]:
                 m.setdefault("_planner_mode", mode)
+        # PRE-FLIGHT tool provisioning (board-converged): tools the plan needs that are MISSING in Kali are
+        # provisioned in the BLACKARCH container up front (prebuilt via pacman -- not ported into Kali), so a
+        # probe never stalls mid-run to fetch a tool. Offline-safe + opt-out (AEGIS_TOOL_PREFLIGHT=0); a
+        # no-op when every needed tool is already in Kali; NEVER blocks a run.
+        if plans and os.environ.get("AEGIS_TOOL_PREFLIGHT", "1") != "0":
+            try:
+                tools = set()
+                for pl in plans:
+                    for m in pl.get("seed_moves", []):
+                        t = str(m.get("tool") or "").strip()
+                        if t and not t.lower().startswith("new-code") and not m.get("new_code"):
+                            tools.add(t)
+                if tools:
+                    import distro_backend
+                    distro_backend.preflight(sorted(tools))
+            except Exception:
+                pass
         return PlannerSession(plans) if plans else None
     except Exception:
         return None
