@@ -511,3 +511,20 @@ python operator\distro_backend.py preflight <t1> <t2> ...   # provision a run's 
 python operator\distro_backend.py pull-blackarch            # one-time: pull the BlackArch image
 ```
 Inside the operator, DeepSeek calls the **`run_tool`** tool (auto-routes) and the **planner pre-flight** provisions the plan's tools at run start. Toggles: `AEGIS_TOOL_PREFLIGHT=0` (skip pre-flight), `AEGIS_TOOL_AUTO=1` (approve gated git/script installers), `AEGIS_BLACKARCH_MEM` (container cap, default 1500m). Every install/run is audited (`tool_install_audit.jsonl`, `distro_run_audit.jsonl`).
+
+## Strict-privacy / zero-egress mode (option)
+
+By default the operator's "brain" is a hosted model provider, so target-derived **prompts** (secret-redacted — see `AEGIS_REDACT_PROMPTS`, on by default) leave the machine. For work where **nothing may leave the box**, run the brain on a **local OpenAI-compatible model** and disable the optional external lanes:
+
+```powershell
+# 1. Point the brain at a LOCAL runtime (Ollama / vLLM / LM Studio -- OpenAI-compatible)
+$env:AEGIS_LLM_ENDPOINT = "http://localhost:11434/v1"   # e.g. Ollama
+$env:AEGIS_LLM_API_KEY  = "local"                        # dummy; local runtimes ignore it
+# 2. Keep secret redaction on (default) and turn OFF every optional external lane:
+$env:AEGIS_REDACT_PROMPTS = "1"     # default; redacts high-confidence secrets from prompts anyway
+$env:AEGIS_RAG_ONLINE     = "0"     # offline vuln-RAG only (no public-feed refresh)
+# (do NOT set OSINT keys -- HIBP/Dehashed/etc.; do NOT set AEGIS_REQUIRE_VPN / AEGIS_VPN_REGION)
+python operator\aegis_operator.py --chat --think --model <your-local-model>
+```
+
+With a local brain: **no prompt, finding, or target-derived data reaches any third party.** The only remaining outbound is *optional* tool installs from public repos — pre-provision what you need (`distro_backend.py preflight ...`) beforehand and you have a fully contained, zero-egress run. The board (multi-model consult) is skipped or also pointed at local models; `AEGIS_BOARD_DISCUSS=0` keeps it off. This is the strictest privacy posture: local reasoning, offline data, no OSINT, no VPN, redaction on.
