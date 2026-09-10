@@ -3,8 +3,11 @@
 **READ THIS BEFORE DOWNLOADING, INSTALLING, COMPILING, OR USING THIS SOFTWARE (the "Software").
 BY DOING ANY OF THOSE THINGS YOU ACCEPT EVERY TERM BELOW. IF YOU DO NOT AGREE, DELETE THE SOFTWARE AND DO NOT USE IT.**
 
-Author / Publisher: **[YOUR NAME OR LEGAL ENTITY]** ("the Author").
-Effective date: **[DATE]**. Governing law: the laws of **[YOUR JURISDICTION]**, without regard to conflict-of-laws rules.
+In this notice, **"the Author"** means the author(s), contributor(s), and provider(s) of this Software,
+collectively and individually. **"You" / "the user"** means any person or entity that downloads, installs,
+compiles, runs, or otherwise uses the Software. This notice takes effect on the date you first obtain or use
+the Software and is governed by the applicable law of the Author's place of residence or establishment, and by
+any mandatory law of the user's own jurisdiction, without regard to conflict-of-laws rules.
 
 ---
 
@@ -18,6 +21,21 @@ authorized in writing to test**, including isolated *mirror copies* of such syst
 It is **not** an offensive tool, an attack platform, a hacking service, or a means of gaining access to any
 system. Any capability it contains exists solely to allow an owner to find and fix weaknesses in **their own**
 environment before a malicious actor does. It is a **research, benchmark, and self-help tool — nothing else.**
+
+## 1A. OUTBOUND COMMUNICATIONS; NO RELAY, PROXY, OR EXFILTRATION
+
+The Software does **not** relay, proxy, tunnel, anonymize, forward, or exfiltrate any third party's traffic
+or data, and contains **no covert channel, command-and-control, or data-exfiltration facility**. Its only
+outbound communications are: (a) requests to the **AI model provider(s) the user configures** (the operator's
+reasoning "brain", to which sensitive material is redacted before transmission) — the Software's disclosed core
+function; (b) **optional, opt-in** queries to public research feeds and OSINT sources for the user's **own**
+authorized research (each gated on the user supplying the relevant key/flag and, where applicable, an
+owned-domain allowlist); (c) **optional** package/tool downloads from public repositories for the user to
+provision their **own** tooling; and (d) an **optional egress VPN** that the user controls, used **solely** to
+route the **user's own authorized-testing traffic** (e.g. egress region or connection retries) — never to
+proxy, relay, or anonymize any other party's traffic. All target interaction is performed **directly** by the
+user against systems the user owns or is authorized to test, within the contained scope; nothing in the
+Software directs, forwards, or reports such traffic to any third party.
 
 ## 2. AUTHORIZED USE ONLY (CONDITION PRECEDENT)
 
