@@ -135,8 +135,20 @@ def run_complete(*, role="dispatcher", budget=50, campaign=None, base=None,
         _log(f"remediation ERROR: {e}")
         rem_ok = False
 
-    summary = _write_report(results, campaign, base, report_path, rem_report if rem_ok else None)
-    _log(f"COMPLETE TEST done. report -> {report_path}")
+    # GENERIC report: two-track (ADMIN scaffold/stack + CODE-improver) + severity + trust tiers + coverage +
+    # RUN COSTS + suite health. final_report is the canonical format; fall back to the thin writer if it errors.
+    try:
+        import final_report
+        summary = final_report.build(campaign, store, target=base,
+                                     remediation_report=(rem_report if rem_ok else None),
+                                     runlog=os.path.join(ROOT, "scratchpad", "complete_test.out"),
+                                     monlog=os.path.join(ROOT, "scratchpad", "relay_mon2.out"),
+                                     out=report_path)
+        _log(f"COMPLETE TEST done. report -> {report_path}  ({summary.get('total')} findings: "
+             f"{summary.get('admin')} admin / {summary.get('code')} code)")
+    except Exception as e:
+        _log(f"final_report failed ({e}); using thin fallback")
+        summary = _write_report(results, campaign, base, report_path, rem_report if rem_ok else None)
     return summary
 
 
