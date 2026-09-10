@@ -64,11 +64,36 @@ def _provider() -> str:
     return "openai" if "openai.com" in ep else "deepseek"
 
 
+# OUTBOUND SECRET REDACTION (board data-hygiene): the operator's brain is a third-party model provider, so
+# target-derived prompts leave the machine. Before EVERY model call we redact HIGH-CONFIDENCE secrets so a
+# discovered key/token/private-key never needlessly reaches the provider. Deliberately conservative -- it does
+# NOT touch app test-credentials/PINs the operator legitimately needs to drive a tool (e.g. credential_replay
+# against the OWNED mirror). Toggle off with AEGIS_REDACT_PROMPTS=0.
+_SECRET_RX = [
+    (re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----", re.S), "<redacted-private-key>"),
+    (re.compile(r"\b(sk-[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{12,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_\-]{30,})\b"), "<redacted-key>"),
+    (re.compile(r"(?i)\b(authorization|bearer)\b\s*[:=]?\s*['\"]?[A-Za-z0-9._\-]{16,}"), "authorization=<redacted>"),
+    (re.compile(r"://[^:/@\s]+:[^@/\s]{4,}@"), "://<redacted-creds>@"),
+]
+
+
+def _scrub_secrets(text):
+    if not isinstance(text, str) or not text:
+        return text
+    for rx, repl in _SECRET_RX:
+        text = rx.sub(repl, text)
+    return text
+
+
 def _create(client, **kw):
     """Provider-adapted chat.completions.create. The DeepSeek path is byte-for-byte unchanged.
     For OpenAI: drop DeepSeek's extra_body={'thinking':...} (OpenAI rejects it), rename
     max_tokens -> max_completion_tokens (forward-compatible, incl. reasoning models), and omit
     temperature (reasoning models reject a non-default value). Validate on the first OpenAI run."""
+    if os.environ.get("AEGIS_REDACT_PROMPTS", "1") != "0":   # scrub high-confidence secrets from outbound prompts
+        for _m in (kw.get("messages") or []):
+            if isinstance(_m, dict) and isinstance(_m.get("content"), str):
+                _m["content"] = _scrub_secrets(_m["content"])
     if _provider() == "cloudflare":
         # Cloudflare Workers AI OpenAI-compatible endpoint: standard chat.completions with
         # max_tokens + temperature; no DeepSeek 'thinking' extra_body, no OpenAI reasoning_effort.

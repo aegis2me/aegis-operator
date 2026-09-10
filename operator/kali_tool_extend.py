@@ -50,10 +50,8 @@ _SEED = {
                        "install": [("pipx", "pwncat-cs")]},
     "ligolo-ng":     {"bin": "ligolo-ng", "distros": ["blackarch"], "category": "pivot",
                        "install": [("go", "github.com/nicocha30/ligolo-ng/cmd/proxy@latest")]},
-    "villain":       {"bin": "villain.py", "distros": ["blackarch"], "category": "c2",
-                       "install": [("git", "https://github.com/t3l3machus/Villain")]},
-    "sliver-server": {"bin": "sliver-server", "distros": ["blackarch"], "category": "c2",
-                       "install": [("script", "curl https://sliver.sh/install|sudo bash")]},
+    # NOTE: C2 frameworks (sliver, villain) are deliberately NOT catalogued -- this is a strictly
+    # defensive tool; it does not ship, install, or facilitate command-and-control / relay tooling.
     # osint / recon
     "sn0int":        {"bin": "sn0int", "distros": ["blackarch"], "category": "osint",
                        "install": [("apt", "sn0int"), ("cargo", "sn0int")]},

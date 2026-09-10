@@ -32,7 +32,8 @@ _AUDIT = os.path.join(HERE, "distro_run_audit.jsonl")
 # kali_tool_extend's catalog + a live pacman -Ss lookup fill the rest.
 DISTRO_TOOLS = {
     "blackarch": {"dalfox", "katana", "gau", "waybackurls", "hakrawler", "gowitness", "x8", "sn0int",
-                  "interactsh-client", "ligolo-ng", "cero", "xnLinkFinder", "sliver", "villain"},
+                  "interactsh-client", "ligolo-ng", "cero", "xnLinkFinder"},
+    # C2 frameworks (sliver/villain) deliberately excluded -- strictly-defensive tool, no C2/relay tooling.
 }
 
 
