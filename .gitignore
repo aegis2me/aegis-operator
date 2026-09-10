@@ -112,3 +112,14 @@ operator/campaigns/
 scratchpad/
 aegis_discuss_test/
 operator/ledger_archive/
+
+# run artifacts + app-specific outputs (regenerated per run)
+operator/cost_ledger/
+operator/*_audit.jsonl
+operator/complete_test_report.md
+operator/complete_test_remediation.md
+operator/tier_report_updated.md
+android/apk_explore_*.json
+android/apk_findings_*.json
+android/apk_plan_*.md
+android/apk_edits/
