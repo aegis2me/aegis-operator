@@ -132,22 +132,61 @@ def _try(method, target, binname):
     return (rc == 0), (err or out)[-200:]
 
 
-def install(name, methods=None):
-    """Resolve + install one tool. Uses the catalog's install spec if present, else tries name-based sources."""
+# TIERED TRUST (board): official package indexes auto-install under the tooling lane; the arbitrary-code
+# class (git clone+build, curl|bash script, pulling an untrusted image) is GATED -- runs only with approval.
+_AUTO_METHODS = {"apt", "pipx", "pip", "go", "cargo", "gem", "npm"}
+_GATED_METHODS = {"git", "script", "docker"}
+_AUDIT = os.path.join(HERE, "tool_install_audit.jsonl")
+
+
+def _audit(entry):
+    """Append-only provenance log: what tool was installed, how, when -- tooling that touched the target."""
+    try:
+        import time
+        entry["ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        with open(_AUDIT, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, default=str) + "\n")
+    except Exception:
+        pass
+
+
+def _tool_version(binname):
+    rc, out, err = _kali(f"{binname} --version 2>&1 | head -1 || {binname} -V 2>&1 | head -1", timeout=30)
+    return (out or "").strip()[:120]
+
+
+def install(name, methods=None, approve_gated=None):
+    """Resolve + install one tool (idempotent). Official package managers auto-install; git/script/docker are
+    GATED (need approve_gated=True, or AEGIS_TOOL_AUTO=1). Every attempt is audit-logged with the version."""
     cat = _load_catalog()
     spec = cat.get(name, {})
     binname = spec.get("bin", name)
     if have(binname):
         print(f"[install] {name}: already present ({binname})"); return {"name": name, "status": "present"}
+    if approve_gated is None:
+        approve_gated = os.environ.get("AEGIS_TOOL_AUTO") == "1"
     plan = methods or spec.get("install") or [("apt", name), ("pipx", name), ("pip", name),
                                               ("cargo", name), ("gem", name)]
+    skipped_gated = []
     for method, target in plan:
+        if method in _GATED_METHODS and not approve_gated:
+            print(f"[install] {name}: {method} '{target}' is GATED (arbitrary code) -- skipped; "
+                  f"pass approve_gated=True / AEGIS_TOOL_AUTO=1 to allow.")
+            skipped_gated.append((method, target)); continue
         print(f"[install] {name}: trying {method} {target} ...", flush=True)
         ok, note = _try(method, target, binname)
-        if ok and (have(binname) or method in ("git", "script", "docker")):
-            print(f"[install] {name}: OK via {method}"); return {"name": name, "status": "installed", "method": method}
+        landed = have(binname) or method in ("git", "script", "docker")
+        _audit({"tool": name, "bin": binname, "method": method, "target": target,
+                "status": "installed" if (ok and landed) else "attempt-failed",
+                "version": _tool_version(binname) if landed else "", "gated": method in _GATED_METHODS})
+        if ok and landed:
+            print(f"[install] {name}: OK via {method}")
+            return {"name": name, "status": "installed", "method": method, "version": _tool_version(binname)}
         print(f"[install] {name}: {method} did not land ({note[:120]})")
+    if skipped_gated:
+        return {"name": name, "status": "needs-approval", "gated": skipped_gated}
     print(f"[install] {name}: FAILED across {[m for m,_ in plan]} -- may need a manual recipe / docker image")
+    _audit({"tool": name, "method": "all", "status": "failed", "tried": [m for m, _ in plan]})
     return {"name": name, "status": "failed", "tried": [m for m, _ in plan]}
 
 
@@ -181,6 +220,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("check"); sub.add_parser("list"); sub.add_parser("diff"); sub.add_parser("refresh")
     pi = sub.add_parser("install"); pi.add_argument("name")
+    pi.add_argument("--yes", action="store_true", help="approve GATED installers (git build / curl|bash / docker)")
     a = ap.parse_args()
     if a.cmd == "check" or a.cmd == "diff":
         check()
@@ -189,7 +229,7 @@ def main():
         for n, s in sorted(cat.items()):
             print(f"  {n:18} [{s.get('category','?')}] <- {','.join(s.get('distros',[]))}")
     elif a.cmd == "install":
-        print(json.dumps(install(a.name), indent=2))
+        print(json.dumps(install(a.name, approve_gated=a.yes), indent=2))
     elif a.cmd == "refresh":
         refresh_blackarch()
 
