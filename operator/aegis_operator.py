@@ -112,6 +112,88 @@ def _create(client, **kw):
         kw.setdefault("reasoning_effort", os.environ.get("AEGIS_LLM_REASONING", "none"))
     return client.chat.completions.create(**kw)
 
+
+# ================= FAST MODE (board-converged latency levers; PRESERVES pro + thinking) =================
+# --fast / AEGIS_FAST=1 turns on: (1) response STREAMING (live deltas, huge perceived-speed win),
+# (2) CONCURRENT read-only tool execution, (3) TRIMMED per-turn context (ledger digest vs full block).
+# It does NOT change the model or disable thinking -- same reasoning, just less waiting / fewer round-trips.
+_FAST = os.environ.get("AEGIS_FAST", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+# --- lightweight response shim so a STREAMED reply matches the non-stream shape the loop consumes ---
+class _FnShim:
+    __slots__ = ("name", "arguments")
+    def __init__(self, name, arguments): self.name = name; self.arguments = arguments
+
+class _TCShim:
+    __slots__ = ("id", "type", "function")
+    def __init__(self, id, name, arguments):
+        self.id = id; self.type = "function"; self.function = _FnShim(name, arguments)
+
+class _MsgShim:
+    __slots__ = ("role", "content", "tool_calls")
+    def __init__(self, content, tool_calls):
+        self.role = "assistant"; self.content = content or None; self.tool_calls = tool_calls or None
+    def model_dump(self, exclude_none=True):
+        d = {"role": "assistant"}
+        if self.content:
+            d["content"] = self.content
+        if self.tool_calls:
+            d["tool_calls"] = [{"id": tc.id, "type": "function",
+                                "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                               for tc in self.tool_calls]
+        return d
+
+class _RespShim:
+    __slots__ = ("choices",)
+    def __init__(self, msg): self.choices = [type("C", (), {"message": msg})()]
+
+
+def _stream_create(client, _p, **kw):
+    """Stream the completion, printing content deltas live, and REASSEMBLE the fragmented tool_calls
+    (id/name/arguments arrive piecewise across chunks, keyed by .index) into the non-stream shape."""
+    kw["stream"] = True
+    stream = _create(client, **kw)
+    parts, tc_acc, order = [], {}, []
+    for chunk in stream:
+        if not getattr(chunk, "choices", None):
+            continue
+        delta = chunk.choices[0].delta
+        if delta is None:
+            continue
+        if getattr(delta, "content", None):
+            parts.append(delta.content); _p(delta.content, end="", flush=True)
+        for tcd in (getattr(delta, "tool_calls", None) or []):
+            idx = getattr(tcd, "index", 0) or 0
+            if idx not in tc_acc:
+                tc_acc[idx] = {"id": "", "name": "", "args": ""}; order.append(idx)
+            slot = tc_acc[idx]
+            if getattr(tcd, "id", None):
+                slot["id"] = tcd.id
+            fn = getattr(tcd, "function", None)
+            if fn is not None:
+                if getattr(fn, "name", None):
+                    slot["name"] = fn.name                     # DeepSeek/OpenAI send the full name once
+                if getattr(fn, "arguments", None):
+                    slot["args"] += fn.arguments               # arguments arrive in fragments -> concatenate
+    tcs = [_TCShim(tc_acc[i]["id"] or f"call_{i}", tc_acc[i]["name"], tc_acc[i]["args"]) for i in order]
+    return _RespShim(_MsgShim("".join(parts), tcs))
+
+
+def _run_readonly_tool(fn, args):
+    """Read-only tool run WITH the transient-error auto-retry (WSL timeout / OOM / 5xx). Shared by the
+    sequential path and the fast-mode concurrent pre-exec, so behaviour is identical either way."""
+    result = json.dumps({"error": "not run"})
+    for _attempt in range(3):
+        try:
+            result = fn(**args)
+        except Exception as e:
+            result = json.dumps({"error": repr(e)[:200]})
+        if _attempt < 2 and _is_transient(result):
+            time.sleep(2 * (_attempt + 1)); continue
+        break
+    return result
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Optional external task-tree scheduler (see orchestrator/). The harness runs fully
 # standalone without it (direct tool-loop + planner_core); the scheduler tools simply
@@ -772,6 +854,24 @@ def _ledger_block():
     if chain:
         c = chain[-1]
         lines.append(f"- CHAIN NOW: hold=[{c.get('gained','')}] next=[{c.get('next_step','')}] {c.get('note','')}")
+    return "\n".join(lines)
+
+
+def _ledger_digest(n=6):
+    """FAST-mode trimmed ledger: counts + the last n finding titles + chain-now, instead of the full block.
+    Smaller stable system prefix => cheaper prefill while prompt-caching still hits. Full block is still
+    re-injected verbatim on compaction (nothing is lost)."""
+    led = [e for e in _load_ledger() if e.get("run") == _RUN_ID]
+    if not led:
+        return ""
+    finds = [e for e in led if e.get("kind") == "finding"]
+    chain = [e for e in led if e.get("kind") == "chain"]
+    lines = [f"\n\n[LEDGER DIGEST -- {len(finds)} finding(s) recorded; full detail preserved on compaction]"]
+    for e in finds[-n:]:
+        lines.append(f"- [{e.get('severity','?')}/{e.get('status','?')}] {e.get('title','')} @ {e.get('endpoint','')}")
+    if chain:
+        c = chain[-1]
+        lines.append(f"- CHAIN NOW: hold=[{c.get('gained','')}] next=[{c.get('next_step','')}]")
     return "\n".join(lines)
 
 # ---- atomic multi-spot edit (parity with robust editing) ----
@@ -2107,9 +2207,22 @@ def _agent_loop(client, model, thinking, messages, allowed_names, max_iter, gate
                   temperature=0.2, max_tokens=1600)
         if extra_body is not None:
             kw["extra_body"] = extra_body
-        resp = _create(client, **kw)
+        # FAST MODE: STREAM the reply (live deltas) on DeepSeek; other providers keep non-stream. Preserves
+        # thinking (extra_body flows through). Falls back to a normal call if streaming errors.
+        streamed = False
+        if _FAST and _provider() == "deepseek":
+            try:
+                _p(f"{tag} #{i}] ", end="", flush=True)
+                resp = _stream_create(client, _p, **kw)
+                _p("", flush=True)
+                streamed = True
+            except Exception as e:
+                _p(f"\n{tag} [stream failed: {repr(e)[:120]} -- non-stream]\n", flush=True)
+                resp = _create(client, **kw)
+        else:
+            resp = _create(client, **kw)
         msg = resp.choices[0].message
-        if msg.content:
+        if msg.content and not streamed:
             _p(f"{tag} #{i}] {msg.content}\n", flush=True)
         messages.append(msg.model_dump(exclude_none=True))
         if not msg.tool_calls:
@@ -2117,6 +2230,34 @@ def _agent_loop(client, model, thinking, messages, allowed_names, max_iter, gate
                 return None  # a plain reply -> hand control back to the operator (REPL)
             messages.append({"role": "user", "content": "Continue: take the next action, or call finish()."})
             continue
+        # FAST MODE: when a turn emits SEVERAL tool calls, pre-run the READ-ONLY ones CONCURRENTLY. Mutating/
+        # gated tools, loop-guarded tools, and finish() are never parallelized -- they run in-order below and
+        # the sequential pass still owns approval, loop-guard, tracking, and finish. Results are consumed in
+        # the ORIGINAL order (the sequential loop just uses the cached result for a pre-run read-only call).
+        precomputed = {}
+        if _FAST and len(msg.tool_calls) > 1:
+            _par = []
+            for _tc in msg.tool_calls:
+                _ent = TOOLS.get(_tc.function.name)
+                if not _ent or _tc.function.name not in allowed_names or _tc.function.name in _LOOP_GUARD_TOOLS:
+                    continue
+                _ro = _ent[1]
+                if _tc.function.name == "vpn_ctl":
+                    try: _ro = _ro or (json.loads(_tc.function.arguments or "{}").get("action") == "status")
+                    except Exception: pass
+                if _ro and _tc.function.name != "finish":
+                    _par.append(_tc)
+            if len(_par) > 1:
+                _p(f"{tag} [fast] running {len(_par)} read-only tools concurrently\n", flush=True)
+                with _cf.ThreadPoolExecutor(max_workers=min(_PARALLEL_MAX, len(_par))) as _ex:
+                    _futs = {}
+                    for _tc in _par:
+                        try: _a = json.loads(_tc.function.arguments or "{}")
+                        except Exception: _a = {}
+                        _futs[_tc.id] = _ex.submit(_run_readonly_tool, TOOLS[_tc.function.name][0], _a)
+                    for _tid, _f in _futs.items():
+                        try: precomputed[_tid] = _f.result()
+                        except Exception as e: precomputed[_tid] = json.dumps({"error": repr(e)[:200]})
         for tc in msg.tool_calls:
             name = tc.function.name
             if name in ("record_finding", "chain_state"):      # record-as-you-go tracking
@@ -2150,17 +2291,14 @@ def _agent_loop(client, model, thinking, messages, allowed_names, max_iter, gate
                     readonly = True  # status is safe
                 if readonly:
                     _p(f"{tag} auto] {name}({json.dumps(args)[:160]})", flush=True)
-                    # TRANSIENT-ERROR RECOVERY (board item 3): auto-retry a read-only/idempotent tool that
-                    # hit an infra hiccup (WSL timeout / OOM / connection / 5xx) -- exactly the class that made
-                    # a live run look dead today. Mutating tools are NOT auto-retried (re-approval owns those).
-                    result = json.dumps({"error": "not run"})
-                    for _attempt in range(3):
-                        try: result = fn(**args)
-                        except Exception as e: result = json.dumps({"error": repr(e)[:200]})
-                        if _attempt < 2 and _is_transient(result):
-                            _p(f"{tag}    [transient failure -- auto-retry {_attempt+1}/2 after backoff]\n", flush=True)
-                            time.sleep(2 * (_attempt + 1)); continue
-                        break
+                    # TRANSIENT-ERROR RECOVERY (board item 3): auto-retry a read-only/idempotent tool that hit
+                    # an infra hiccup (WSL timeout / OOM / connection / 5xx). In FAST mode this readonly call
+                    # may have ALREADY run concurrently in the pre-exec above -- use that cached result.
+                    if tc.id in precomputed:
+                        result = precomputed[tc.id]
+                        _p(f"{tag}    [fast] used concurrent result\n", flush=True)
+                    else:
+                        result = _run_readonly_tool(fn, args)
                 else:
                     if name == "write_file":
                         preview = _diff_preview(args.get("path", ""), args.get("content", ""))
@@ -2246,9 +2384,11 @@ def _banner(model, endpoint, gate, mode="autonomous"):
     print("   #============================================================#", flush=True)
     print("   #   D E E P S E E K   C O O R D I N A T O R   (aegis)        #", flush=True)
     print("   #============================================================#", flush=True)
-    print(f"   brain={model}  seat=DeepSeek  mode={mode}  gate={appr}", flush=True)
+    print(f"   brain={model}  seat=DeepSeek  mode={mode}{'  [FAST]' if _FAST else ''}  gate={appr}", flush=True)
     print(f"   target-mode={TARGET_MODE}  aegis_home={AEGIS_HOME}  repo={REPO}", flush=True)
     print(f"   endpoint={endpoint}  aegis-up={_aegis_up()}  audit={os.path.basename(AUDIT_LOG)}", flush=True)
+    if _FAST:
+        print("   FAST: streaming + concurrent read-only tools + trimmed context (pro + thinking preserved)", flush=True)
     print("   doctrine: owned/authorized targets only · contained · non-destructive", flush=True)
     print("   NOTICE: defensive research/benchmark/self-help only -- see DISCLAIMER.md; use = acceptance", flush=True)
     print("=" * 72 + "\n", flush=True)
@@ -2262,7 +2402,8 @@ def run(task_text, model, thinking, max_iter, gate, remediate_on_finish=False):
     client = OpenAI(api_key=key, base_url=endpoint)
     _CTX.update(client=client, model=model, thinking=thinking, gate=gate, depth=0, sub_max_iter=8)
     _banner(model, endpoint, gate)
-    messages = [{"role": "system", "content": SYSTEM + _DOCTRINE + _skill_preface() + _mode_policy(TARGET_MODE) + _memory_preface() + _ledger_block()}, {"role": "user", "content": task_text}]
+    _led = _ledger_digest() if _FAST else _ledger_block()   # FAST: smaller stable prefix (full block on compaction)
+    messages = [{"role": "system", "content": SYSTEM + _DOCTRINE + _skill_preface() + _mode_policy(TARGET_MODE) + _memory_preface() + _led}, {"role": "user", "content": task_text}]
     summ = _agent_loop(client, model, thinking, messages, list(TOOLS.keys()), max_iter, gate, depth=0, tag="[DS")
     if summ is not None:
         print("=" * 72 + "\nDS-OPERATOR FINAL:\n" + summ + "\n" + "=" * 72)
@@ -2303,7 +2444,7 @@ def run_chat(model, thinking, gate, session_path=None):
     client = OpenAI(api_key=key, base_url=endpoint)
     _CTX.update(client=client, model=model, thinking=thinking, gate=gate, depth=0, sub_max_iter=8)
     _banner(model, endpoint, gate, mode="interactive chat")
-    chat_system = SYSTEM + _DOCTRINE + _skill_preface() + CHAT_SYSTEM_ADDENDUM + _mode_policy(TARGET_MODE) + _memory_preface() + _ledger_block()
+    chat_system = SYSTEM + _DOCTRINE + _skill_preface() + CHAT_SYSTEM_ADDENDUM + _mode_policy(TARGET_MODE) + _memory_preface() + (_ledger_digest() if _FAST else _ledger_block())
     messages = None
     if session_path and os.path.exists(session_path):
         loaded = _load_session(session_path)
@@ -2351,6 +2492,10 @@ if __name__ == "__main__":
                          "(GPT-5.6 Sol via OPENAI_API_KEY). Sets AEGIS_PROVIDER; 'openai' auto-selects "
                          "model gpt-5.6-sol unless --model is given.")
     ap.add_argument("--think", action="store_true", help="enable DS thinking mode (default off)")
+    ap.add_argument("--fast", action="store_true", default=_FAST,
+                    help="FAST MODE: response streaming + concurrent read-only tools + trimmed per-turn "
+                         "context. Preserves the model + thinking (no quality loss); just less waiting / "
+                         "fewer round-trips. Also enabled by AEGIS_FAST=1.")
     ap.add_argument("--max-iter", type=int, default=int(os.environ.get("AEGIS_MAX_ITER", "40")),
                     help="max reasoning/act cycles for a task run (default 40, or $AEGIS_MAX_ITER). "
                          "Deep engagements may need 60-120; the max_iter guardrail still emits a "
@@ -2371,6 +2516,7 @@ if __name__ == "__main__":
                     help="STAGE 10: after the run finishes, deterministically run the remediation round over "
                          "this run's VERIFIED findings (safety net for autonomous no-human runs). No-op if none.")
     a = ap.parse_args()
+    _FAST = a.fast   # module global read by _agent_loop/_create/run/run_chat/_banner
     if a.provider:
         os.environ["AEGIS_PROVIDER"] = a.provider
         if a.provider == "openai" and "deepseek" in a.model.lower():
