@@ -474,3 +474,40 @@ Two equivalent routes:
 
 This is why the suite can pursue and exceed commercial coverage without ever being "finished": the board +
 coordinator keep adding, correcting, and sharpening mechanisms as new bug classes or targets appear.
+
+---
+
+## Fast vs Slow operator mode (DeepSeek Coordinator)
+
+Two operator variants live in git; pick by branch. **Pro + thinking are preserved in both** — fast mode is only about latency (streaming + concurrency + trimmed context), never a quality/model downgrade.
+
+- **Slow (default) — `master`:** the benchmarked config. Full tool-loop, no streaming.
+  ```powershell
+  git checkout master
+  python operator\aegis_operator.py --chat --think
+  ```
+- **Fast — `fast-ds-operator` branch:** adds `--fast` (streaming + concurrent read-only tool calls + trimmed per-turn context).
+  ```powershell
+  git checkout fast-ds-operator
+  python operator\aegis_operator.py --chat --fast --think        # or: --task "..." --fast --think
+  ```
+  `AEGIS_FAST=1` also enables it. The start banner shows `[FAST]` when on. Switch back with `git checkout master`.
+
+Use fast for interactive/simple work; slow (or fast — same brain) for the heaviest reasoning. Fast mode fires none of the autonomous-run nudges in `--chat`, so interactive turns stay lean.
+
+## Extending the toolbox across distros (Kali ↔ BlackArch)
+
+When a probe needs a tool, a **3-way switch** (`operator/distro_backend.py`, board-designed) decides where it runs — you never port a non-portable tool into Kali:
+
+1. **present in Kali** → run in **Kali**.
+2. **missing but PORTABLE** (apt / pip / pipx / go / cargo / upstream release) → **install into Kali** and run there.
+3. **missing and NON-PORTABLE** (BlackArch-only, unavailable for Kali) → run in the **BlackArch container** (prebuilt via pacman; started per-probe, `--network host` to reach the target, **stopped when idle = 0 RAM**).
+
+Classification: curated portability catalog first (fast), then a cached apt/PyPI probe. Invoke it:
+```powershell
+python operator\distro_backend.py route <tool>              # show the decision
+python operator\distro_backend.py run <tool> -- <args...>   # run it in the right backend
+python operator\distro_backend.py preflight <t1> <t2> ...   # provision a run's tools up front
+python operator\distro_backend.py pull-blackarch            # one-time: pull the BlackArch image
+```
+Inside the operator, DeepSeek calls the **`run_tool`** tool (auto-routes) and the **planner pre-flight** provisions the plan's tools at run start. Toggles: `AEGIS_TOOL_PREFLIGHT=0` (skip pre-flight), `AEGIS_TOOL_AUTO=1` (approve gated git/script installers), `AEGIS_BLACKARCH_MEM` (container cap, default 1500m). Every install/run is audited (`tool_install_audit.jsonl`, `distro_run_audit.jsonl`).

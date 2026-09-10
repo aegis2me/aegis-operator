@@ -135,13 +135,42 @@ def run_in_blackarch(cmd, ensure_tools=None, keep_up=False, timeout=1800):
 
 
 # ---------------- the router ----------------
+_PORTABILITY_CACHE = {}   # tool -> bool (portable to Kali), cached per the board's switch design
+
+
+def _is_portable(tool):
+    """Board-designed SWITCH classifier: is the tool PORTABLE to Kali (installable there), or is it
+    NON-PORTABLE (BlackArch-only)? Default = curated catalog (fast, accurate); fall back to a cheap,
+    CACHED apt/pip probe. Non-portable => it goes to BlackArch. (Ranked #1 by the board: catalog first.)"""
+    if tool in _PORTABILITY_CACHE:
+        return _PORTABILITY_CACHE[tool]
+    portable = False
+    # 1. curated catalog: kali_tool_extend knows a Kali install recipe (apt/pipx/pip/go/cargo) => PORTABLE.
+    try:
+        sys.path.insert(0, HERE); import kali_tool_extend
+        spec = kali_tool_extend._load_catalog().get(tool)
+        if spec and spec.get("install"):
+            portable = True
+    except Exception:
+        pass
+    # 2. cheap probe (only if uncatalogued): Kali apt has a candidate, or PyPI has the package => PORTABLE.
+    if not portable:
+        rc, out, _ = _kali(f"apt-cache policy {tool} 2>/dev/null | grep -i candidate | grep -vi '(none)'; "
+                           f"pip index versions {tool} 2>/dev/null | head -1", 90)
+        portable = bool(out.strip())
+    _PORTABILITY_CACHE[tool] = portable
+    return portable
+
+
 def route(tool):
-    """Decide the backend for a tool. Policy (user-set): a tool PRESENT in Kali runs in Kali; anything MISSING
-    goes to BLACKARCH (prebuilt via pacman, native environment) -- NOT ported into Kali (source-builds OOM /
-    Arch-native tools don't adapt cleanly). Kali-install is only a last-resort fallback if BlackArch lacks it."""
+    """The multi-distro SWITCH (board-designed, user policy). Three-way:
+      1. PRESENT in Kali            -> 'kali'      (run it there).
+      2. MISSING but PORTABLE       -> 'install'   (apt/pip/go/cargo -> install in Kali, works there).
+      3. MISSING and NON-PORTABLE   -> 'blackarch' (BlackArch-only / can't be gotten for Kali -> container).
+    BlackArch is used ONLY for the non-portable, otherwise-unavailable tools -- not for anything merely missing."""
     if have_kali(tool):
         return "kali"
-    return "blackarch"   # missing -> BlackArch (prebuilt/native), preferred over porting into Kali
+    return "install" if _is_portable(tool) else "blackarch"
 
 
 def pacman_has(tool):
@@ -155,23 +184,25 @@ def pacman_has(tool):
 
 
 def run_tool(tool, argv, timeout=1800):
-    """Run `tool argv...` in the right backend (distro-agnostic API). MISSING tools run in BlackArch; Kali
-    install is only tried if BlackArch does not provide the tool."""
+    """Run `tool argv...` in the right backend (distro-agnostic API), per the 3-way switch:
+    present->Kali; portable-missing->install in Kali then run; non-portable->BlackArch. Each step falls
+    back to BlackArch if Kali can't actually provide it (the ultimate 'it only exists in BlackArch' safety)."""
     backend = route(tool)
     line = f"{tool} {argv}" if isinstance(argv, str) else " ".join([tool] + list(argv))
     if backend == "kali":
         rc, out, err = _kali(line, timeout)
-    else:  # blackarch (preferred for missing)
+    elif backend == "install":                       # portable -> install into Kali, then run there
+        try:
+            sys.path.insert(0, HERE); import kali_tool_extend
+            res = kali_tool_extend.install(tool)
+        except Exception as e:
+            res = {"status": "failed", "err": str(e)}
+        if res.get("status") in ("installed", "present"):
+            rc, out, err = _kali(line, timeout); backend = "kali(installed)"
+        else:                                        # portability probe was wrong -> BlackArch fallback
+            rc, out, err = run_in_blackarch(line, ensure_tools=[tool], timeout=timeout); backend = "blackarch(fallback)"
+    else:                                            # non-portable -> BlackArch
         rc, out, err = run_in_blackarch(line, ensure_tools=[tool], timeout=timeout)
-        # last-resort: if BlackArch has no such package, fall back to a Kali install then run
-        if rc != 0 and ("command not found" in (out + err).lower() or "target not found" in (out + err).lower()):
-            try:
-                sys.path.insert(0, HERE); import kali_tool_extend
-                res = kali_tool_extend.install(tool)
-                if res.get("status") in ("installed", "present"):
-                    rc, out, err = _kali(line, timeout); backend = "kali(fallback-install)"
-            except Exception as e:
-                err = (err or "") + f" | kali-fallback failed: {e}"
     _audit({"router": True, "tool": tool, "backend": backend, "rc": rc})
     return {"tool": tool, "backend": backend, "rc": rc, "stdout": out[-4000:], "stderr": err[-1000:]}
 
