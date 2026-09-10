@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+NOTICE: Authorization-gated pen-test mode for OWNED / EXPLICITLY-AUTHORIZED targets ONLY (fail-closed RoE).
+Unauthorized/offensive use is prohibited and is the user's sole act. Use = acceptance of DISCLAIMER.md.
+
 redteam.py -- the THIRD run option (beside Operator and ExploitGym), under the changed doctrine
 (redteam/DOCTRINE.md): authorization-gated, owned live targets, RoE-bound. This is the first-class
 pen-test path.

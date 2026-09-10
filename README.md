@@ -1,5 +1,11 @@
 # Aegis Operator
 
+> ⚠️ **LEGAL NOTICE — READ [`DISCLAIMER.md`](DISCLAIMER.md) BEFORE USE.** This is a **defensive
+> security-research, benchmark, and self-help tool for systems you OWN or are EXPLICITLY AUTHORIZED in
+> writing to test** (and mirror copies of them) — **nothing else**. Any unauthorized, offensive, or
+> unlawful use is strictly prohibited and is the sole, independent act of the user, not the Author.
+> **By using this Software you accept the terms in `DISCLAIMER.md` in full.**
+
 A self-contained toolkit for **authorized, contained security research and AI-operator benchmarking** against your *own* applications. It has **three run modes on one shared discovery engine**, backed by a multi-model board and an oracle-gated verification layer:
 
 1. **Operator co-pilot** (`operator/`) — an LLM in the operator seat (DeepSeek / OpenAI-compatible), with an approval gate, an offline vuln-RAG, a planner, and a hash-chained findings ledger. Drives a Kali toolset via the orchestrator.

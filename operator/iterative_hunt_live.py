@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+NOTICE: Defensive research/benchmark/self-help on OWNED or EXPLICITLY-AUTHORIZED systems (and mirrors) ONLY.
+Unauthorized/offensive use is prohibited and is the user's sole act. Use = acceptance of DISCLAIMER.md.
+
 iterative_hunt_live.py -- wire IterativeHunt into the OPERATOR path.
 
 execute -> runs a board-proposed move against the mirror behind the non-destructive guard

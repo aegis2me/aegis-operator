@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 r"""
+NOTICE: Defensive security-research / benchmark / self-help tool for systems you OWN or are EXPLICITLY
+AUTHORIZED in writing to test (and mirror copies) ONLY. Unauthorized/offensive use is prohibited and is
+the user's sole act. Use = acceptance of DISCLAIMER.md (repo root). Not legal advice.
+
 aegis_operator.py -- DeepSeek (DS) as the OPERATOR CO-PILOT, with a human APPROVAL GATE.
 
 DS is the brain; this harness is the hands. The stock `deepseek` CLI can only DECIDE
@@ -2218,6 +2222,7 @@ def _banner(model, endpoint, gate, mode="autonomous"):
     print(f"   target-mode={TARGET_MODE}  aegis_home={AEGIS_HOME}  repo={REPO}", flush=True)
     print(f"   endpoint={endpoint}  aegis-up={_aegis_up()}  audit={os.path.basename(AUDIT_LOG)}", flush=True)
     print("   doctrine: owned/authorized targets only · contained · non-destructive", flush=True)
+    print("   NOTICE: defensive research/benchmark/self-help only -- see DISCLAIMER.md; use = acceptance", flush=True)
     print("=" * 72 + "\n", flush=True)
 
 
